@@ -112,6 +112,7 @@
 </sc-for>
 <sc-if value="{{ b.showPh }}" hint-placeholder-val="{{ false }}"><span style="position:absolute;left:0;top:0;color:#b5b0a8;pointer-events:none">Skriv her … (⌘E for enhet)</span></sc-if>
 </div></sc-if>
+<sc-if value="{{ b.isRaw }}" hint-placeholder-val="{{ false }}"><div style="display:flex;flex-direction:column;gap:6px;padding:4px 0"><div style="font-size:11px;font-weight:600;letter-spacing:.05em;color:#8d8982">LATEX</div><textarea value="{{ b.src }}" onChange="{{ b.onRaw }}" onFocus="{{ b.onFocus }}" spellCheck="false" rows="{{ b.rows }}" placeholder="\begin{align} … \end{align}" style="width:100%;font-family:'JetBrains Mono',monospace;font-size:12.5px;line-height:1.6;padding:8px 10px;border:1px solid #e2dfd9;border-radius:7px;background:#fbfaf8;color:#3d3a36;resize:vertical;outline:none;font-variant-ligatures:none"></textarea></div></sc-if>
 <sc-if value="{{ b.isEq }}" hint-placeholder-val="{{ false }}"><div style="display:flex;flex-direction:column;gap:8px;padding:4px 0">
 <div style="display:flex;align-items:center"><div style="flex:1;display:flex;justify-content:center;font-size:19px;min-height:44px;align-items:center">{{ b.eqEl }}</div><span style="font-size:13px;color:#a29e97">({{ b.num }})</span></div>
 <sc-if value="{{ b.isActive }}" hint-placeholder-val="{{ false }}"><div style="display:flex;gap:8px;align-items:center"><input value="{{ b.src }}" onChange="{{ b.onSrc }}" spellCheck="false" style="flex:1;font-family:'JetBrains Mono',monospace;font-size:13px;padding:7px 10px;border:1px solid oklch(0.55 0.15 250);border-radius:7px;outline:none;background:#fff;color:#1f1e1c"><span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#8d8982">{{ b.label }}</span></div></sc-if>
@@ -148,9 +149,8 @@
 
 <sc-if value="{{ showCode }}" hint-placeholder-val="{{ false }}">
 <div style="flex:1;min-height:0;display:flex;flex-direction:column;border-top:1px solid #e2dfd9;background:#f8f6f2">
-<div style="height:34px;flex:none;display:flex;align-items:center;gap:14px;padding:0 16px;font-size:12px;color:#6b6862;border-bottom:1px solid #e9e6e0"><span style="font-weight:600;color:#3d3a36">main.tex</span><span>Generert fra den visuelle editoren. Klikk en linje for å gå til blokken.</span><div style="flex:1"></div><span onClick="{{ copyCode }}" style="cursor:pointer;color:oklch(0.45 0.15 250);font-weight:500">{{ copyCodeLabel }}</span></div>
-<div style="flex:1;overflow:auto;padding:8px 0;font-family:'JetBrains Mono',monospace;font-size:12.5px;line-height:1.7">
-<sc-for list="{{ codeLines }}" as="l" hint-placeholder-count="20"><div onClick="{{ l.onClick }}" style="display:flex;padding:0 16px;background:{{ l.bg }};cursor:{{ l.cursor }};white-space:pre"><span style="width:38px;flex:none;color:#b5b0a8;text-align:right;padding-right:14px">{{ l.n }}</span><span><sc-for list="{{ l.parts }}" as="p" hint-placeholder-count="1"><span style="color:{{ p.c }}">{{ p.t }}</span></sc-for></span></div></sc-for>
+<div style="height:34px;flex:none;display:flex;align-items:center;gap:14px;padding:0 16px;font-size:12px;color:#6b6862;border-bottom:1px solid #e9e6e0"><span style="font-weight:600;color:#3d3a36">main.tex</span><span>Rediger fritt, eller lim inn LaTeX. Endringer leses inn i dokumentet.</span><span style="color:#b3261e;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ codeErr }}</span><div style="flex:1"></div><span onClick="{{ copyCode }}" style="cursor:pointer;color:oklch(0.45 0.15 250);font-weight:500">{{ copyCodeLabel }}</span></div>
+<div style="flex:1;overflow:auto">{{ codeEditor }}
 </div></div>
 </sc-if>
 

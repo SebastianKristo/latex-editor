@@ -14,8 +14,9 @@ export type Block = { id: string } & (
   | { type: 'fig'; caption: string; label: string; span?: boolean; circuit: Circuit }
   | { type: 'img'; src: string; file: string; w: number; span?: boolean; caption: string; label: string }
   | { type: 'table'; style: string; caption: string; label: string; rows: string[][] }
+  | { type: 'raw'; src: string }
 );
-export interface Doc { id: string; title: string; authors: string; group: string; folder: string; meta?: string; blocks: Block[] }
+export interface Doc { id: string; title: string; authors: string; group: string; folder: string; meta?: string; preamble?: string; blocks: Block[] }
 export interface Settings { size: string; cols: number; dec: string; imag: string; style: string; indent: boolean; warn: boolean; maxPages: number; engine: string; auto: boolean; [k: string]: any }
 export interface Line { s: string; bid?: string | null; cid?: string }
 
@@ -40,7 +41,6 @@ export function parseInline(s: string): Seg[];
 export function numberDoc(blocks: Block[]): { num: Record<string, any>; labels: Record<string, any>; refText(l: string): string };
 export function paginate(blocks: Block[], cols: number, dec: string): Block[][];
 export function makeDocs(): Doc[];
-export function skeleton(tpl: string): Block[];
 export function terms(c: Component): Record<string, { x: number; y: number }>;
 export function cbox(d: Circuit): { x0: number; y0: number; x1: number; y1: number };
 export function qtyCode(v: { num: string; prefix: string; unit: string }): string;
@@ -48,3 +48,6 @@ export function esc(s: string): string;
 export function slug(s: string): string;
 export function diode(): Circuit;
 export function gamepad(): Circuit;
+export function tok(s: string): { t: string; c: string }[];
+export function parseDocument(tex: string, o?: { S?: Settings; prev?: Partial<Doc> }): { title?: string; authors?: string; group?: string; preamble?: string; blocks: Block[] };
+export function skeleton(tpl: string): Block[];

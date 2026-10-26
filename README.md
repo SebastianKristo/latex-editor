@@ -31,11 +31,15 @@ Første gang serveren startes uten brukere viser klienten «Opprett administrato
 ## Hvordan det henger sammen
 
 - **Dokumenter** er Yjs-dokumenter (ett per rapport). Blokker, metadata, kommentarer og historikk ligger i dokumentet. Samtidige endringer i ulike blokker flettes; i samme blokk vinner siste endring. Serveren lagrer tilstanden i SQLite og håndhever roller: lesere får ikke gjennom endringer, og kommentatorer kan bare endre kommentarer.
+- **LaTeX-koden kan redigeres direkte** i «Kode» og «Delt». Endringer leses tilbake til blokker, og egne `\usepackage`-linjer tas vare på. LaTeX som ikke passer en kjent blokktype (for eksempel `align` eller egne makroer), blir en «LaTeX»-blokk som skrives ut uendret. Innlimt LaTeX i den visuelle editoren blir også til blokker, og «{ } LaTeX» setter inn en tom LaTeX-blokk.
 - **Live-markører** går via Yjs awareness: hvem som står i hvilken blokk.
 - **PDF**: klienten sender generert LaTeX til `/api/compile`, og serveren kjører `latexmk` og svarer med PDF. Klikk i PDF-en slår opp linjen med SyncTeX og hopper til blokken. Aktiv blokk markeres i PDF-en.
 - **Deling**: invitasjoner gir lenken `https://<server>/i/<kode>`, gyldig i 7 dager og uten konto. E-post sendes med SMTP (Proton Mail som standard). Uten SMTP havner e-posten i utboksen og lenken virker likevel.
 - **Admin** (`/api/admin/*`) gir 403 for vanlige brukere. Innstillinger for DuckDNS, backup og SMTP lagres på serveren.
-- **HTTPS**: med `TLS_LETSENCRYPT=true` hentes sertifikat fra Let's Encrypt via DNS-01, der TXT-posten settes med DuckDNS-API-et. Serveren lytter da på 8443 og fornyer når det er under 30 dager igjen.
+- **HTTPS**: med `TLS_LETSENCRYPT=true` hentes sertifikat fra Let's Encrypt via DNS-01, der TXT-posten settes med DuckDNS-API-et. Serveren fornyer når det er under 30 dager igjen.
+  - HTTPS slås av og på straks innstillingen endres. Status og eventuelle feil vises i DuckDNS-loggen under Innstillinger.
+  - Videresend TCP 443 i ruteren til serveren. Docker mapper 443 til 8443 i containeren, og Proxmox-installasjonen lytter direkte på 443.
+  - Virker ikke adressen hjemmefra, prøv fra mobilnett. Mange rutere sender ikke trafikk til egen offentlig IP tilbake inn (NAT-loopback).
 
 ## Server og image
 

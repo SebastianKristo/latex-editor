@@ -87,6 +87,8 @@ import {
 } from '@kobling/core';
 import { symEls, drawCircuit } from '@kobling/ui';
 import { DCLogic } from './dc-runtime';
+import { CodeEditor } from './CodeEditor';
+import { parseDocument } from '@kobling/core';
 import { openChannel } from './sync';
 import * as GEN from '../../../deploy/generators.js';
 const LSK = 'kobling-demo-v1';
@@ -987,6 +989,23 @@ export default class Component extends DCLogic {
     );
     this.toast('Gjenopprettet fra ' + k.name);
   }
+  // Hele main.tex redigert i kodevisningen: les inn igjen som blokker (ukjent LaTeX beholdes ordrett).
+  applyFullCode = text => {
+    const doc = this.curDoc();
+    let r;
+    try {
+      r = parseDocument(text, { S: this.state.settings, prev: doc });
+    } catch (e) {
+      this.setState({ codeErr: e.message });
+      return false;
+    }
+    const next = { ...doc, ...r };
+    if (this.state.codeErr) this.setState({ codeErr: '' });
+    if (JSON.stringify(next) === JSON.stringify(doc)) return true;
+    this.setDoc(() => next, this._codeHist ? null : 'Redigerte LaTeX-koden');
+    this._codeHist = true;
+    return true;
+  };
   openCodeEdit = () => {
     const b = this.findBlock(this.state.active);
     if (!b) return;
@@ -1157,11 +1176,13 @@ export default class Component extends DCLogic {
   };
   edPaste = e => {
     const tx = e.clipboardData && e.clipboardData.getData('text/plain');
-    if (tx && /\\begin\{circuitikz\}|\\draw[\s\S]*to\s*\[/.test(tx)) {
+    if (tx && /\\begin\{circuitikz\}|\\draw[\s\S]*to\s*\[/.test(tx) && !/\\begin\{(document|figure)/.test(tx)) {
       e.preventDefault();
       this.openPaste(tx, 'editor');
       return;
     }
+    const tg = (e.target.tagName || '').toLowerCase();
+    if (tx && tg !== 'textarea' && tg !== 'input' && this.pasteLatex(tx, e)) return;
     const items = [...((e.clipboardData && e.clipboardData.items) || [])].filter(
       i => i.kind === 'file' && i.type.startsWith('image/')
     );
@@ -1169,6 +1190,51 @@ export default class Component extends DCLogic {
     e.preventDefault();
     this.insertImages(items.map(i => i.getAsFile()).filter(Boolean), this.state.active);
   };
+  // Innlimt LaTeX: et helt dokument eller flere blokker blir til blokker etter aktiv blokk;
+  // en enkel linje inne i et avsnitt limes inn som tekst med enheter/symboler/referanser.
+  pasteLatex(tx, e) {
+    const blocky = /\\(begin\{|(sub)*section\*?\{|item\b|documentclass)|\n\s*\n/.test(tx);
+    const inline = /\\(qty|SI|cref)\{|\$[^$]+\$/.test(tx);
+    if (!blocky && !inline) return false;
+    if (!blocky) {
+      if (!(e.target && e.target.closest && e.target.closest('[data-seg]'))) return false;
+      let segs;
+      try {
+        segs = parseInline(tx.trim());
+      } catch (err) {
+        return false;
+      }
+      e.preventDefault();
+      segs.filter(sg => sg.t !== 'text' || sg.v).forEach(sg => this.insertSeg(sg, 'Limte inn LaTeX'));
+      return true;
+    }
+    let r;
+    try {
+      r = parseDocument(tx, { S: this.state.settings });
+    } catch (err) {
+      e.preventDefault();
+      this.toast(err.message);
+      return true;
+    }
+    if (!r.blocks.length) return false;
+    e.preventDefault();
+    const after = this.state.active;
+    this.setDoc(d => {
+      const i = d.blocks.findIndex(b => b.id === after),
+        at = i < 0 ? d.blocks.length : i + 1;
+      return {
+        ...d,
+        preamble: r.preamble ? [d.preamble, r.preamble].filter(Boolean).join('\n') : d.preamble,
+        blocks: [...d.blocks.slice(0, at), ...r.blocks, ...d.blocks.slice(at)]
+      };
+    }, 'Limte inn LaTeX');
+    const raw = r.blocks.filter(b => b.type === 'raw').length;
+    this.toast(
+      'La inn ' + r.blocks.length + (r.blocks.length === 1 ? ' blokk' : ' blokker') + ' fra LaTeX' +
+        (raw ? ' (' + raw + ' som LaTeX-kode)' : '')
+    );
+    return true;
+  }
   openPaste(text, target) {
     this.setState({ paste: { text: text || '', mode: 'replace', err: '', warn: [], target: target || 'circuit' } });
   }
@@ -1482,6 +1548,7 @@ export default class Component extends DCLogic {
         isEq: b.type === 'eq',
         isFig: b.type === 'fig',
         isTable: b.type === 'table',
+        isRaw: b.type === 'raw',
         onClick: () => {
           if (this.state.active !== b.id) {
             this.activeSrc = 'editor';
@@ -1571,6 +1638,11 @@ export default class Component extends DCLogic {
           };
         });
         vm.showPh = b.segs.every(x => x.t === 'text' && !x.v) && !act;
+      }
+      if (b.type === 'raw') {
+        vm.src = b.src;
+        vm.rows = Math.min(24, Math.max(2, (b.src || '').split('\n').length));
+        vm.onRaw = e => this.updBlock(b.id, { src: e.target.value });
       }
       if (b.type === 'eq') {
         vm.eqEl = this.texEl(b.src, true);
@@ -1769,6 +1841,11 @@ export default class Component extends DCLogic {
           )
       },
       {
+        label: '{ } LaTeX',
+        title: 'Fri LaTeX-kode (skrives ut uendret)',
+        onClick: () => this.addBlockAfter(after, { type: 'raw', src: '' }, 'La til LaTeX-blokk', false)
+      },
+      {
         label: '↗ Referanse ▾',
         sep: 1,
         title: 'Kryssreferanse (\\cref)',
@@ -1797,6 +1874,17 @@ export default class Component extends DCLogic {
     v.noRefs = !v.refItems.length;
 
     const code = docCode(doc, S);
+    v.codeEditor = h(CodeEditor, {
+      lines: code,
+      active: s.active,
+      onApply: this.applyFullCode,
+      onLine: bid => {
+        this.activeSrc = 'code';
+        this.setState({ active: bid });
+      },
+      onDone: () => (this._codeHist = false)
+    });
+    v.codeErr = s.codeErr || '';
     v.codeLines = code.map((l, i) => ({
       n: i + 1,
       parts: tok(l.s),
@@ -2891,7 +2979,7 @@ export default class Component extends DCLogic {
     v.duckNext = !d.on ? 'DuckDNS er av' : du.last ? 'Om ' + d.interval + ' min' : 'Etter første oppdatering';
     v.duckLog = du.log.map(l => ({ txt: l.t + '  ' + l.txt, color: l.ok ? '#3d6b47' : '#b3261e' }));
     v.noDuckLog = !du.log.length;
-    v.duckPortNote = 'Videresend TCP ' + (d.tls ? '443' : dep.port) + ' i ruteren til serveren for å nå den utenfra.';
+    v.duckPortNote = 'Videresend TCP ' + (d.tls ? '443' : dep.port) + ' i ruteren til serveren for å nå den utenfra. Virker ikke adressen hjemmefra, prøv fra mobilnett: mange rutere sender ikke trafikk til egen offentlig IP tilbake inn (NAT-loopback).';
     v.hasSmbTest = !!bu.test;
     v.smbTestMsg = bu.test ? bu.test.msg : '';
     v.smbTestColor = bu.test && bu.test.ok ? '#3d6b47' : '#b3261e';

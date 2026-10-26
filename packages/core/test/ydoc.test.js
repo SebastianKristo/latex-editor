@@ -12,7 +12,7 @@ describe('Yjs-dokumentmodell', () => {
     expect(isEmptyY(y)).toBe(true);
     applyDocToY(y, doc);
     const { meta, ...rest } = docFromY(y, doc.id);
-    expect(rest).toEqual({ id: doc.id, title: doc.title, authors: doc.authors, group: doc.group, folder: doc.folder, blocks: doc.blocks });
+    expect(rest).toEqual({ id: doc.id, title: doc.title, authors: doc.authors, group: doc.group, folder: doc.folder, preamble: '', blocks: doc.blocks });
   });
 
   it('samtidige endringer i ulike blokker flettes', () => {

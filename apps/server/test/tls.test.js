@@ -29,10 +29,15 @@ test('HTTPS-serveren svarer med eksisterende sertifikat selv om fornyelse feiler
   await app.listen({ port: 0 });
   const logs = [];
   const port = 18000 + Math.floor(Math.random() * 1000);
-  const stop = await startTls(app, { getDuck: () => ({ tls: true, domain: 'mitt-navn', token: 'x' }), dataDir: dir, port, email: 'a@b.no', log: x => logs.push(x), directoryUrl: 'http://127.0.0.1:1/dir' });
+  let on = true;
+  const tls = await startTls(app, { getDuck: () => ({ tls: on, domain: 'mitt-navn', token: 'x' }), dataDir: dir, port, email: 'a@b.no', log: x => logs.push(x), directoryUrl: 'http://127.0.0.1:1/dir' });
   await new Promise(r => setTimeout(r, 200));
   const body = await new Promise((res, rej) => request({ host: '127.0.0.1', port, path: '/api/health', rejectUnauthorized: false }, r => { let b = ''; r.on('data', d => b += d); r.on('end', () => res(b)) }).on('error', rej).end());
   assert.equal(JSON.parse(body).ok, true);
-  assert.ok(logs.some(l => l.tls === 'lytter'));
-  stop(); await app.close(); rmSync(dir, { recursive: true, force: true });
+  assert.ok(logs.some(l => l.txt === `HTTPS kjører på port ${port}`));
+  // slås av i innstillingene -> lytteren stoppes uten omstart
+  on = false; await tls.ensure();
+  assert.ok(logs.some(l => l.txt === 'HTTPS er slått av'));
+  await assert.rejects(new Promise((res, rej) => request({ host: '127.0.0.1', port, path: '/api/health', rejectUnauthorized: false }, res).on('error', rej).end()));
+  tls.stop(); await app.close(); rmSync(dir, { recursive: true, force: true });
 });

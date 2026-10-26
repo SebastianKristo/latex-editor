@@ -89,6 +89,7 @@ if [ "$UPDATE" -eq 0 ]; then
     # Verdier med mellomrom (f.eks. BACKUP_CRON) siteres, så filen virker både for systemd og shell.
     grep -v '^#' "$APP/src/deploy/.env.example" | sed -E "s/^KOBLING_PORT=.*/KOBLING_PORT=$PORT/; s/^([A-Z_]+)=(.* .*)$/\1=\"\2\"/"
     echo "KOBLING_LISTEN_PORT=$PORT"
+    echo "KOBLING_HTTPS_PORT=443"
     echo "KOBLING_DATA=$DATA"
     echo "KOBLING_WEB_DIR=$APP/app/web"
     [ -n "${KOBLING_ADMIN_EMAIL:-}" ] && echo "KOBLING_ADMIN_EMAIL=$KOBLING_ADMIN_EMAIL"
@@ -98,6 +99,8 @@ if [ "$UPDATE" -eq 0 ]; then
   ok "port $PORT"
 fi
 PORT="$(sed -n 's/^KOBLING_LISTEN_PORT=//p' "$ENVF")"
+# Eldre installasjoner lyttet med HTTPS på 8443; ruteren videresender 443, så bruk 443 direkte.
+grep -q '^KOBLING_HTTPS_PORT=' "$ENVF" || echo "KOBLING_HTTPS_PORT=443" >> "$ENVF"
 
 # ---------- tjeneste ----------
 cat > /etc/systemd/system/kobling.service <<EOF
@@ -116,6 +119,9 @@ Environment=NODE_NO_WARNINGS=1
 WorkingDirectory=$APP/app
 ExecStart=/usr/bin/env node src/index.js
 Restart=on-failure
+# HTTPS (Let's Encrypt) lytter på 443 uten å kjøre som root
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
 RestartSec=3
 NoNewPrivileges=true
 ProtectSystem=full

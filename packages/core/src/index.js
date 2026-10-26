@@ -203,7 +203,7 @@ const USERS = {
   MH: { name: 'Mia', full: 'Mia Hansen', color: 'oklch(0.62 0.13 150)' },
   EL: { name: 'Emil', full: 'Emil Larsen', color: 'oklch(0.62 0.13 300)' }
 };
-const KIND = { abstract: 'abs', h1: '§', h2: '§§', p: '¶', eq: 'eq', fig: 'fig', img: 'img', table: 'tab' };
+const KIND = { abstract: 'abs', h1: '§', h2: '§§', p: '¶', eq: 'eq', fig: 'fig', img: 'img', table: 'tab', raw: 'tex' };
 const GROUPS = ['ADK 61 · ELI1300', 'Lab-par · ELPE1300', 'Privat'];
 const TPLS = [
   { k: 'rapport', name: 'Rapportmal ELI1300', desc: 'Jetlund 2025 · tospalte, 11pt, siunitx, circuitikz' },
@@ -434,6 +434,8 @@ function docCode(doc, S) {
   const L = [],
     P = (s, bid) => L.push({ s, bid: bid || null });
   preamble(S).forEach(s => P(s));
+  // Egne preamble-linjer fra kodeeditoren (f.eks. ekstra \usepackage)
+  if (doc.preamble) doc.preamble.split('\n').forEach(s => P(s));
   P('');
   P(`\\title{${esc(doc.title)}}`);
   P(`\\author{${esc(doc.authors)}\\\\${esc(doc.group)}}`);
@@ -447,7 +449,8 @@ function docCode(doc, S) {
       P('\\begin{abstract}', i);
       P('  ' + esc(b.text), i);
       P('\\end{abstract}', i);
-    } else if (b.type === 'h1') P(`\\section{${esc(b.text)}}`, i);
+    } else if (b.type === 'raw') (b.src || '').split('\n').forEach(l => P(l, i));
+    else if (b.type === 'h1') P(`\\section{${esc(b.text)}}`, i);
     else if (b.type === 'h2') P(`\\subsection{${esc(b.text)}}`, i);
     else if (b.type === 'p') P(b.segs.map(segTex).join(''), i);
     else if (b.type === 'eq') {
@@ -574,6 +577,8 @@ function paginate(blocks, cols, dec) {
         return Math.round((cols === 2 && !b.span ? 15 : 11) * (b.w || 0.8)) + 3;
       case 'table':
         return b.style === 'list' ? b.rows.length * 1.3 + 1 : b.rows.length * 1.5 + 4;
+      case 'raw':
+        return (b.src || '').split('\n').length * 1.1;
       default:
         return 1;
     }
@@ -901,6 +906,8 @@ function parseBlock(b, code) {
     },
     lab = () => grab(/\\label\{([^}]*)\}/);
   switch (b.type) {
+    case 'raw':
+      return { src: code.replace(/^\n+|\s+$/g, '') };
     case 'h1': {
       const x = grab(/^\\section\*?\{([\s\S]*)\}$/);
       if (x == null) throw new Error('Forventet \\section{…}');
@@ -1690,3 +1697,4 @@ export {
   parseCircuit,
   autoLayout
 };
+export { parseDocument } from './latex-doc.js';

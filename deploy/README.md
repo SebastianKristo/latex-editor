@@ -2,7 +2,18 @@
 
 Filene her er generert fra `generators.js` med standardverdier. Appen (Innstillinger › Installer server) lager tilpassede versjoner med dine DuckDNS- og SMB-innstillinger.
 
-## Proxmox VE 8 (LXC)
+## Proxmox VE 8/9 – helper-skript (anbefalt)
+Oppretter en Debian 13-LXC og installerer Kobling direkte (TeX Live, Node.js 22, systemd-tjeneste), uten Docker. Kjør i Shell på Proxmox-noden:
+
+    bash -c "$(curl -fsSL https://raw.githubusercontent.com/SebastianKristo/latex-editor/main/deploy/proxmox/kobling.sh)"
+
+Velg *Standard* eller *Avansert* (CT-ID, ressurser, lagring, bro/VLAN, statisk IP, port og administrator). Uten spørsmål: `KOBLING_DEFAULTS=1 CTID=130 RAM=4096 bash -c "…"`.
+
+- Innstillinger: `/etc/kobling/kobling.env` i containeren (samme variabler som under), deretter `systemctl restart kobling`.
+- Oppdatering: `pct exec <CTID> -- kobling-update` (henter siste versjon, bygger og starter på nytt; innstillinger og data beholdes).
+- Data: `/var/lib/kobling`. Logg: `journalctl -u kobling -f`.
+
+## Proxmox VE 8 (LXC med Docker)
 Kjør i Shell på Proxmox-noden:
 
     bash -c "$(curl -fsSL https://raw.githubusercontent.com/SebastianKristo/latex-editor/main/deploy/proxmox/install.sh)"

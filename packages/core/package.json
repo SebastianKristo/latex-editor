@@ -5,7 +5,23 @@
   "type": "module",
   "main": "src/index.js",
   "types": "src/index.d.ts",
-  "exports": { ".": { "types": "./src/index.d.ts", "default": "./src/index.js" } },
-  "scripts": { "test": "vitest run" },
-  "devDependencies": { "vitest": "^2.0.5" }
+  "exports": {
+    ".": {
+      "types": "./src/index.d.ts",
+      "default": "./src/index.js"
+    },
+    "./ydoc": {
+      "types": "./src/ydoc.d.ts",
+      "default": "./src/ydoc.js"
+    }
+  },
+  "scripts": {
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "vitest": "^2.0.5"
+  },
+  "dependencies": {
+    "yjs": "^13.6.33"
+  }
 }

@@ -39,7 +39,10 @@ export function tokenOf(req) {
   const h = req.headers.authorization;
   if (h && h.startsWith('Bearer ')) return h.slice(7);
   const m = (req.headers.cookie || '').match(/(?:^|;\s*)kobling=([a-f0-9]+)/);
-  return m ? m[1] : null;
+  if (m) return m[1];
+  // Nettlesere kan ikke sette headere på WebSocket; desktop-appen sender token i URL-en.
+  const q = req.query && req.query.token;
+  return typeof q === 'string' && /^[a-f0-9]{64}$/.test(q) ? q : null;
 }
 
 // Rolle per dokument: Eier > Kan redigere > Kan kommentere > Kan lese

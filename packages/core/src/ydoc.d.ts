@@ -1,0 +1,12 @@
+import * as Y from 'yjs';
+import type { Doc } from './index';
+export const META_KEYS: string[];
+export const HISTORY_MAX: number;
+export function docFromY(ydoc: Y.Doc, id: string): Doc;
+export function isEmptyY(ydoc: Y.Doc): boolean;
+export function applyDocToY(ydoc: Y.Doc, doc: Doc, origin?: any): void;
+export function commentsFromY(ydoc: Y.Doc): any[];
+export function applyCommentsToY(ydoc: Y.Doc, list: any[], origin?: any): void;
+export function historyFromY(ydoc: Y.Doc): any[];
+export function pushHistory(ydoc: Y.Doc, entry: any, origin?: any): void;
+export { Y };

@@ -6,7 +6,7 @@ export default defineConfig({
   server: {
     port: 5173,
     fs: { allow: ['../..'] },
-    proxy: { '/api': 'http://localhost:8080', '/sync': { target: 'ws://localhost:8080', ws: true } }
+    proxy: { '/api': 'http://localhost:8080', '/i/': 'http://localhost:8080', '/sync': { target: 'ws://localhost:8080', ws: true } }
   },
   build: { outDir: 'dist', chunkSizeWarningLimit: 2000 }
 });

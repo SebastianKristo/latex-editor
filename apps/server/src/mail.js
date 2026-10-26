@@ -13,7 +13,7 @@ export function smtpProblem(m) {
 export function transport(m) {
   return nodemailer.createTransport({
     host: m.host, port: Number(m.port),
-    secure: m.sec === 'tls' || Number(m.port) === 465,
+    secure: m.sec === 'tls' || m.sec === 'ssl' || Number(m.port) === 465,
     requireTLS: m.sec === 'starttls',
     auth: m.user ? { user: m.user, pass: m.pass } : undefined,
     tls: m.host === '127.0.0.1' ? { rejectUnauthorized: false } : undefined
@@ -55,17 +55,22 @@ export function commentMail({ from, docTitle, text, url }) {
   return { subject: `Ny kommentar i «${docTitle}»`, ...layout({ title: `Ny kommentar fra ${from}`, lines: [text], button: 'Vis kommentaren', url }) };
 }
 
-export async function sendMail(db, m, kind, to, mail, attachments) {
+export async function sendMail(db, m, kind, to, mail, attachments = [], meta = {}) {
   const problem = smtpProblem(m);
-  const log = (status, error) => db.prepare('INSERT INTO mail_log (kind, to_addr, subject, status, error, created) VALUES (?, ?, ?, ?, ?, ?)')
-    .run(kind, to, mail.subject, status, error || null, Date.now());
-  if (problem) { log('utboks', problem); return { ok: false, queued: true, error: problem } }
+  const log = (status, error) => db.prepare(`INSERT INTO mail_log (kind, to_addr, subject, status, error, created, user_id, doc_id, url, body, attachments)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(kind, to, mail.subject, status, error || null, Date.now(),
+    meta.userId || null, meta.docId || null, meta.url || null, meta.body || null, JSON.stringify(attachments.map(a => a.filename)));
+  if (problem) { log('I utboks', problem); return { ok: false, queued: true, error: problem } }
   try {
     await transport(m).sendMail({ from: m.from || m.user, to, subject: mail.subject, text: mail.text, html: mail.html, attachments });
-    log('sendt');
+    log('Sendt');
     return { ok: true };
   } catch (e) {
-    log('feil', e.message);
+    log('Feilet', e.message);
     return { ok: false, error: e.message };
   }
+}
+
+export function testMail(url) {
+  return { subject: 'Test fra Kobling', ...layout({ title: 'SMTP virker', lines: ['Denne e-posten bekrefter at Kobling kan sende invitasjoner og varsler.'], button: 'Åpne Kobling', url }) };
 }

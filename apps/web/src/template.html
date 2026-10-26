@@ -1,15 +1,8 @@
 <div ref="{{ rootRef }}" style="height:100vh;min-width:1180px;display:flex;flex-direction:column;background:#fbfaf8;font-family:'Instrument Sans',sans-serif;color:#1f1e1c;overflow:hidden;position:relative">
 
-<sc-if value="{{ isWeb }}" hint-placeholder-val="{{ false }}">
-<div style="height:42px;flex:none;display:flex;align-items:flex-end;gap:14px;padding:0 14px;background:#dedbd5">
-<div style="display:flex;gap:8px;align-self:center"><div style="width:12px;height:12px;border-radius:50%;background:#ff5f57"></div><div style="width:12px;height:12px;border-radius:50%;background:#febc2e"></div><div style="width:12px;height:12px;border-radius:50%;background:#28c840"></div></div>
-<div style="padding:8px 16px;background:#f3f1ed;border-radius:8px 8px 0 0;font-size:12px;width:220px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ docTitle }} – Kobling</div>
-<div style="flex:1;align-self:center;margin-right:120px;padding:5px 12px;background:#efece6;border-radius:7px;font-size:12px;color:#6b6862;font-family:'JetBrains Mono',monospace">{{ url }}</div>
-</div>
-</sc-if>
 
 <div data-tauri-drag-region="true" style="height:52px;flex:none;display:flex;align-items:center;gap:14px;padding:0 16px;background:#f3f1ed;border-bottom:1px solid #e2dfd9;white-space:nowrap">
-<sc-if value="{{ isMac }}" hint-placeholder-val="{{ true }}"><div style="display:flex;gap:8px;margin-right:40px"><div style="width:12px;height:12px;border-radius:50%;background:#ff5f57"></div><div style="width:12px;height:12px;border-radius:50%;background:#febc2e"></div><div style="width:12px;height:12px;border-radius:50%;background:#28c840"></div></div></sc-if>
+<sc-if value="{{ isMac }}" hint-placeholder-val="{{ true }}"><div style="width:52px;margin-right:40px;flex:none"></div></sc-if>
 <sc-if value="{{ isWin }}" hint-placeholder-val="{{ false }}"><div style="width:18px;height:18px;border-radius:4px;background:oklch(0.52 0.15 250);color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center">K</div></sc-if>
 <sc-if value="{{ showBrand }}" hint-placeholder-val="{{ false }}"><div onClick="{{ goProjects }}" style="font-weight:700;font-size:15px;letter-spacing:-.01em;cursor:pointer;margin-right:8px">Kobling</div></sc-if>
 <div style="position:relative;flex:none">
@@ -185,6 +178,7 @@
 
 <sc-if value="{{ isPdfTab }}" hint-placeholder-val="{{ true }}">
 <div ref="{{ pdfRef }}" style="flex:1;overflow:auto;padding:22px 0 60px;display:flex;flex-direction:column;align-items:center;gap:18px;position:relative">
+{{ pdfView }}
 <sc-for list="{{ pages }}" as="pg" hint-placeholder-count="2">
 <div style="width:440px;height:622px;flex:none;background:#fff;box-shadow:0 4px 20px rgba(0,0,0,.12);padding:38px 34px 22px;display:flex;flex-direction:column;font-family:'STIX Two Text',serif;font-size:7.4px;line-height:1.45;color:#111;position:relative;zoom:{{ pdfZoom }}">
 <sc-if value="{{ pg.isFirst }}" hint-placeholder-val="{{ true }}"><div style="text-align:center;display:flex;flex-direction:column;gap:5px;margin:4px 0 14px"><div style="font-size:14px">{{ pg.title }}</div><div style="font-size:8.5px">{{ pg.authors }}</div><div style="font-size:8.5px">{{ pg.group }}</div></div></sc-if>
@@ -285,7 +279,7 @@
 <div style="width:220px;flex:none;background:#f3f1ed;border-right:1px solid #e2dfd9;padding:16px 10px;display:flex;flex-direction:column;gap:2px;font-size:13px">
 <sc-for list="{{ setTabs }}" as="t" hint-placeholder-count="6"><sc-if value="{{ t.isHead }}" hint-placeholder-val="{{ false }}"><div style="font-size:11px;font-weight:600;color:#8d8982;letter-spacing:.04em;padding:14px 10px 6px">{{ t.label }}</div></sc-if><sc-if value="{{ t.isTab }}" hint-placeholder-val="{{ true }}"><div onClick="{{ t.onClick }}" style="padding:7px 10px;border-radius:6px;cursor:pointer;background:{{ t.bg }};font-weight:{{ t.fw }}">{{ t.label }}</div></sc-if><sc-if value="{{ t.isLocked }}" hint-placeholder-val="{{ false }}"><div style="padding:7px 10px;color:#a29e97;display:flex;align-items:center;gap:6px">{{ t.label }}</div></sc-if></sc-for>
 <div onClick="{{ goEditor }}" style="margin-top:auto;padding:7px 10px;border-radius:6px;cursor:pointer;color:oklch(0.45 0.15 250)">‹ Tilbake til dokumentet</div>
-<div onClick="{{ resetDemo }}" style="padding:7px 10px;border-radius:6px;cursor:pointer;color:#8d8982;font-size:12px" style-hover="color:#b3261e">Tilbakestill demodata</div>
+<sc-if value="{{ isDemo }}" hint-placeholder-val="{{ true }}"><div onClick="{{ resetDemo }}" style="padding:7px 10px;border-radius:6px;cursor:pointer;color:#8d8982;font-size:12px" style-hover="color:#b3261e">Tilbakestill demodata</div></sc-if>
 </div>
 <div style="flex:1;min-width:0;overflow:auto;padding:28px 40px 80px;display:flex;flex-direction:column;gap:14px;font-size:14px;max-width:700px">
 <sc-for list="{{ setRows }}" as="r" hint-placeholder-count="8">

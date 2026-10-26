@@ -5,7 +5,8 @@ const env = process.env;
 export function loadConfig(over = {}) {
   const e = { ...env, ...over };
   return {
-    port: Number(e.KOBLING_PORT || 8080),
+    // I containeren er KOBLING_PORT vertsporten (compose mapper den til 8080); KOBLING_LISTEN_PORT vinner.
+    port: Number(e.KOBLING_LISTEN_PORT || e.KOBLING_PORT || 8080),
     httpsPort: Number(e.KOBLING_HTTPS_PORT || 8443),
     publicUrl: e.KOBLING_PUBLIC_URL || '',
     dataDir: e.KOBLING_DATA || '/data',
@@ -25,10 +26,7 @@ export function loadConfig(over = {}) {
     smtp: {
       host: e.SMTP_HOST || '', port: Number(e.SMTP_PORT || 587), sec: e.SMTP_SECURITY || 'starttls',
       user: e.SMTP_USER || '', pass: e.SMTP_PASS || '', from: e.SMTP_FROM || '', notify: e.NOTIFY_COMMENTS !== 'false'
-    }
+    },
+    deploy: {}
   };
 }
-
-export const SECRET_KEYS = ['token', 'pass'];
-// Hemmeligheter maskeres i API-svar; ekte verdier bare i nedlasting/bruk på serveren.
-export const mask = obj => Object.fromEntries(Object.entries(obj).map(([k, v]) => [k, SECRET_KEYS.includes(k) && v ? '••••••••' : v]));

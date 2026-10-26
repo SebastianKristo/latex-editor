@@ -31,4 +31,4 @@ SMTP-token krever betalt abonnement og en adresse på eget domene (ikke @proton.
 ## Backup til SMB
 Serveren pakker `/data` (dokumenter, figurer, historikk, brukere) som `.tar.zst` etter `BACKUP_CRON` og laster opp med smbclient til `//BACKUP_SMB_HOST/BACKUP_SMB_SHARE/BACKUP_SMB_PATH`. De `BACKUP_KEEP` nyeste beholdes. Ingen mount trengs, så det fungerer også i uprivilegerte LXC-er.
 
-> Container-imaget `ghcr.io/sebastiankristo/kobling-server` finnes ikke ennå. Det må bygges fra server-koden før skriptene virker.
+> Container-imaget `ghcr.io/sebastiankristo/kobling-server` bygges og publiseres av CI fra `main` (se `Dockerfile` i roten). Uten `KOBLING_ADMIN_EMAIL` oppretter du administratoren i nettleseren første gang.

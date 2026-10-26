@@ -1,0 +1,11 @@
+# Kobling server – start med: docker compose up -d
+services:
+  kobling:
+    image: ghcr.io/sebastiankristo/kobling-server:latest
+    container_name: kobling
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    env_file: .env
+    volumes:
+      - ./data:/data

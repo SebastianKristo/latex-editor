@@ -1,0 +1,38 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test
+      - run: pnpm --filter @kobling/web build
+  latex:
+    # Akseptanse: hvert eksempeldokument kompilerer med latexmk uten feil.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends texlive-latex-extra texlive-pictures texlive-science texlive-lang-european latexmk
+      - run: pnpm install --frozen-lockfile
+      - run: node tools/compile-examples.mjs
+  image:
+    if: github.ref == 'refs/heads/main'
+    needs: [test, latex]
+    runs-on: ubuntu-latest
+    permissions: { contents: read, packages: write }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with: { registry: ghcr.io, username: '${{ github.actor }}', password: '${{ secrets.GITHUB_TOKEN }}' }
+      - uses: docker/build-push-action@v6
+        with: { context: ., push: true, tags: ghcr.io/sebastiankristo/kobling-server:latest }

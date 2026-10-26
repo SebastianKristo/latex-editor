@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=STIX+Two+Text:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+<style>body{margin:0;background:#e7e5e1;-webkit-font-smoothing:antialiased}a{color:oklch(0.5 0.15 250)}a:hover{color:oklch(0.4 0.15 250)}</style>
+</helmet>
+
+<section id="turn-1" style="padding:96px 96px 160px;display:flex;flex-direction:column;gap:72px;font-family:'Instrument Sans',sans-serif;color:#1f1e1c">
+<div style="display:flex;flex-direction:column;gap:8px;max-width:900px">
+<div style="font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:#7a766f">Kobling · designutkast 1</div>
+<div style="font-size:40px;font-weight:600;letter-spacing:-.02em">LaTeX-editor for elektrorapporter</div>
+<div style="font-size:17px;line-height:1.5;color:#5f5b55;text-wrap:pretty">Mac-app med visuell editor, PDF ved siden av, kretsskjema-editor som skriver CircuiTikZ, symbol- og enhetsvelger basert på siunitx, og deling via server. Øverst: to retninger for hovededitoren. Under: resten av skjermene i retning 1a.</div>
+</div>
+
+<div style="display:flex;flex-wrap:wrap;gap:96px">
+
+<!-- 1a -->
+<div id="1a" style="position:relative;display:flex;flex-direction:column;gap:16px">
+<div style="display:flex;align-items:center;gap:12px"><div style="background:#1f1e1c;color:#fff;font-weight:600;font-size:15px;padding:4px 10px;border-radius:6px">1a</div><div style="font-size:18px;font-weight:500">Lys, tre paneler. Innsetting via verktøylinje, koden i skuff nederst.</div></div>
+<div style="width:1440px;height:900px;border-radius:12px;overflow:hidden;background:#fbfaf8;box-shadow:0 30px 80px rgba(0,0,0,.18),0 0 0 1px rgba(0,0,0,.12);display:flex;flex-direction:column">
+<div style="height:52px;flex:none;display:flex;align-items:center;gap:16px;padding:0 16px;background:#f3f1ed;border-bottom:1px solid #e2dfd9">
+<div style="display:flex;gap:8px"><div style="width:12px;height:12px;border-radius:50%;background:#ff5f57"></div><div style="width:12px;height:12px;border-radius:50%;background:#febc2e"></div><div style="width:12px;height:12px;border-radius:50%;background:#28c840"></div></div>
+<div style="width:120px"></div>
+<div style="display:flex;align-items:center;gap:6px;font-size:13px;color:#7a766f"><span>ELI1300</span><span>/</span><span style="color:#1f1e1c;font-weight:600">Oblig 4 – Gamepad-emulator</span></div>
+<div style="flex:1;display:flex;justify-content:center"><div style="display:flex;background:#e6e3dd;border-radius:7px;padding:2px;font-size:12px;font-weight:500"><div style="padding:4px 14px;border-radius:5px;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.1)">Visuell</div><div style="padding:4px 14px;color:#6b6862">Kode</div><div style="padding:4px 14px;color:#6b6862">Delt</div></div></div>
+<div style="display:flex;align-items:center;gap:6px;font-size:12px;color:#4d8a5a"><div style="width:7px;height:7px;border-radius:50%;background:#4d8a5a"></div>Kompilert 0,8 s</div>
+<div style="display:flex"><div style="width:26px;height:26px;border-radius:50%;background:oklch(0.62 0.13 30);color:#fff;font-size:11px;font-weight:600;display:flex;align-items:center;justify-content:center;border:2px solid #f3f1ed">SK</div><div style="width:26px;height:26px;border-radius:50%;background:oklch(0.62 0.13 150);color:#fff;font-size:11px;font-weight:600;display:flex;align-items:center;justify-content:center;border:2px solid #f3f1ed;margin-left:-8px">MH</div><div style="width:26px;height:26px;border-radius:50%;background:oklch(0.62 0.13 300);color:#fff;font-size:11px;font-weight:600;display:flex;align-items:center;justify-content:center;border:2px solid #f3f1ed;margin-left:-8px">EL</div></div>
+<div style="padding:6px 14px;border-radius:7px;background:oklch(0.52 0.15 250);color:#fff;font-size:13px;font-weight:600">Del</div>
+</div>
+<div style="flex:1;display:flex;min-height:0">
+<div style="width:236px;flex:none;background:#f3f1ed;border-right:1px solid #e2dfd9;padding:16px 10px;display:flex;flex-direction:column;gap:22px;font-size:13px">
+<div style="display:flex;flex-direction:column;gap:2px"><div style="font-size:11px;font-weight:600;color:#8d8982;padding:0 8px 6px;letter-spacing:.04em">FILER</div>
+<div style="padding:5px 8px;border-radius:6px;background:#e4e0d9;font-weight:500">main.tex</div><div style="padding:5px 8px;color:#4a4742">figurer/kretsskjema.kob</div><div style="padding:5px 8px;color:#4a4742">figurer/diode.kob</div><div style="padding:5px 8px;color:#4a4742">figurer/plott-id.tikz</div><div style="padding:5px 8px;color:#4a4742">bilder/oppkobling.jpg</div></div>
+<div style="display:flex;flex-direction:column;gap:2px"><div style="font-size:11px;font-weight:600;color:#8d8982;padding:0 8px 6px;letter-spacing:.04em">DISPOSISJON</div>
+<div style="padding:4px 8px;color:#4a4742">Sammendrag</div><div style="padding:4px 8px;color:#4a4742">1 Innledning</div><div style="padding:4px 8px 4px 22px;color:#7a766f">1.1 Hensikt</div><div style="padding:4px 8px 4px 22px;color:#7a766f">1.2 Utstyrsliste</div><div style="padding:4px 8px;color:#4a4742">2 Teoretisk del</div><div style="padding:4px 8px;border-radius:6px;background:#fff;color:oklch(0.45 0.15 250);font-weight:600">3 Praktisk arbeid</div><div style="padding:4px 8px;color:#4a4742">4 Resultater</div><div style="padding:4px 8px;color:#4a4742">5 Diskusjon</div><div style="padding:4px 8px;color:#4a4742">6 Konklusjon</div></div>
+<div style="display:flex;flex-direction:column;gap:6px;padding:0 8px"><div style="font-size:11px;font-weight:600;color:#8d8982;padding-bottom:2px;letter-spacing:.04em">KRAV I MALEN</div>
+<div style="display:flex;justify-content:space-between;color:#4a4742"><span>Tospalte</span><span style="color:#4d8a5a">OK</span></div>
+<div style="display:flex;justify-content:space-between;color:#4a4742"><span>Sider</span><span>3 av 5</span></div>
+<div style="display:flex;justify-content:space-between;color:#4a4742"><span>Figurer referert</span><span style="color:#b26a1e">1 mangler</span></div>
+<div style="display:flex;justify-content:space-between;color:#4a4742"><span>Notasjon (v, ikke U)</span><span style="color:#4d8a5a">OK</span></div></div>
+</div>
+<div style="flex:1;min-width:0;display:flex;flex-direction:column;background:#fbfaf8">
+<div style="height:44px;flex:none;display:flex;align-items:center;gap:4px;padding:0 16px;border-bottom:1px solid #ebe8e3;font-size:13px;color:#3d3a36;white-space:nowrap;overflow:hidden">
+<div style="padding:4px 10px;border-radius:6px;border:1px solid #e2dfd9;background:#fff">Brødtekst ▾</div><div style="width:1px;height:20px;background:#e2dfd9;margin:0 6px"></div>
+<div style="padding:4px 9px;font-weight:700">B</div><div style="padding:4px 9px;font-style:italic;font-family:'STIX Two Text',serif;font-size:15px">I</div><div style="width:1px;height:20px;background:#e2dfd9;margin:0 6px"></div>
+<div style="padding:4px 9px;border-radius:6px;background:oklch(0.95 0.03 250);color:oklch(0.45 0.15 250);font-weight:600">Ω Enhet</div><div style="padding:4px 9px">∑ Ligning</div><div style="padding:4px 9px">⏚ Krets</div><div style="padding:4px 9px">Figur</div><div style="padding:4px 9px">Tabell</div><div style="padding:4px 9px">Ref.</div>
+</div>
+<div style="flex:1;overflow:hidden;padding:40px 64px;display:flex;flex-direction:column;gap:18px;font-size:16px;line-height:1.6">
+<div style="font-size:26px;font-weight:600;letter-spacing:-.01em"><span style="color:#a29e97;margin-right:12px">3</span>Praktisk arbeid</div>
+<div style="text-wrap:pretty">Kretsen ble koblet opp på breadboard som vist i <span style="padding:1px 7px;border-radius:5px;background:#efece6;border:1px solid #e2dfd9;font-size:14px">Figur 2</span>. Kilden gir <span style="padding:1px 7px;border-radius:5px;background:oklch(0.96 0.025 250);border:1px solid oklch(0.88 0.05 250);color:oklch(0.4 0.15 250);font-size:14px"><i style="font-family:'STIX Two Text',serif;font-size:16px">v<sub>s</sub></i> = 9 V</span> over en formotstand på <span style="padding:1px 7px;border-radius:5px;background:oklch(0.96 0.025 250);border:2px solid oklch(0.55 0.15 250);color:oklch(0.4 0.15 250);font-size:14px">220 Ω</span>, og strømmen gjennom lysdioden er gitt ved <span style="padding:1px 7px;border-radius:5px;background:#efece6;border:1px solid #e2dfd9;font-size:14px">Ligning 1</span>.</div>
+<div style="align-self:center;display:flex;align-items:center;gap:14px;font-family:'STIX Two Text',serif;font-size:22px;padding:8px 0"><i>i<sub style="font-size:14px">D</sub></i><span>=</span><span style="display:inline-flex;flex-direction:column;align-items:center"><span style="padding:0 6px"><i>v<sub style="font-size:14px">s</sub></i> − <i>v<sub style="font-size:14px">D</sub></i></span><span style="height:1px;background:#1f1e1c;align-self:stretch"></span><i style="padding-top:2px">R</i></span><span style="font-family:'Instrument Sans';font-size:13px;color:#a29e97;margin-left:40px">(1)</span></div>
+<div style="border:1px solid #e2dfd9;border-radius:10px;background:#fff;padding:20px;display:flex;flex-direction:column;align-items:center;gap:12px;position:relative">
+<div style="position:absolute;top:10px;right:10px;display:flex;gap:6px;font-size:12px"><div style="padding:4px 10px;border-radius:6px;background:#f3f1ed">Rediger krets</div><div style="padding:4px 10px;border-radius:6px;background:#f3f1ed">fig:circ_diode</div></div>
+<svg width="240" height="150" viewBox="0 0 200 135" fill="none" stroke="#1f1e1c" stroke-width="1.4"><path d="M30 15V55M30 85V120H170V73M30 15H80M130 15H170V55"></path><circle cx="30" cy="70" r="15"></circle><polyline points="80,15 85,15 89,8 97,22 105,8 113,22 121,8 125,15 130,15"></polyline><polygon points="160,55 180,55 170,72" fill="#fff"></polygon><path d="M160 73H180M182 58l8-6M184 64l8-6"></path><text x="25" y="66" font-size="11" stroke="none" fill="#1f1e1c">+</text><text x="26" y="81" font-size="11" stroke="none" fill="#1f1e1c">−</text><text x="-2" y="74" font-size="10" stroke="none" fill="#1f1e1c" font-style="italic" font-family="STIX Two Text" text-anchor="end">v</text><text x="92" y="35" font-size="10" stroke="none" fill="#1f1e1c" font-family="STIX Two Text">220 Ω</text></svg>
+<div style="font-size:14px;color:#4a4742"><b>Figur 2:</b> Diodekretsen fra introkurset tegnet med CircuiTikZ.</div>
+</div>
+<div style="text-wrap:pretty;color:#3d3a36">Spenningen over lysdioden ble målt med multimeter parallelt over komponenten, mens strømmen ble målt i serie med formotstanden.</div>
+</div>
+<div style="flex:none;border-top:1px solid #e2dfd9;background:#f3f1ed;padding:10px 16px;display:flex;align-items:center;gap:14px;font-size:12px;color:#6b6862">
+<div style="font-weight:600;color:#3d3a36">LaTeX ▸</div>
+<div style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:#3d3a36;background:#fff;border:1px solid #e2dfd9;border-radius:6px;padding:4px 10px">formotstand på <span style="color:oklch(0.5 0.15 250)">\qty</span>{220}{<span style="color:oklch(0.5 0.15 30)">\ohm</span>}</div>
+<div style="flex:1"></div><div>Vis kode ⌥⌘L</div>
+</div>
+</div>
+<div style="width:520px;flex:none;background:#e9e6e0;border-left:1px solid #e2dfd9;display:flex;flex-direction:column">
+<div style="height:44px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 16px;font-size:12px;color:#6b6862;border-bottom:1px solid #dedad3"><span style="font-weight:600;color:#3d3a36">main.pdf</span><span>Side 2 av 3 · 90 %</span></div>
+<div style="flex:1;display:flex;justify-content:center;padding-top:24px;overflow:hidden">
+<div style="width:440px;height:622px;flex:none;background:#fff;box-shadow:0 4px 20px rgba(0,0,0,.12);padding:38px 34px;display:grid;grid-template-columns:1fr 1fr;gap:16px;font-family:'STIX Two Text',serif;font-size:7.4px;line-height:1.45;color:#111;align-content:start">
+<div style="display:flex;flex-direction:column;gap:6px"><div style="text-align:justify">For rapporter i dette emnet er det tegnet opp hvordan kretsen er koblet på breadboard, og hvordan kretsene er målt. Tabell 1 viser utstyret.</div><div style="font-size:10px;font-weight:600;margin-top:4px">3 Praktisk arbeid</div><div style="text-align:justify;background:oklch(0.94 0.04 250);margin:0 -3px;padding:0 3px">Kretsen ble koblet opp på breadboard som vist i Figur 2. Kilden gir <i>v<sub>s</sub></i> = 9 V over en formotstand på 220 Ω, og strømmen gjennom lysdioden er gitt ved (1).</div><div style="display:flex;justify-content:space-between;font-size:9px;padding:4px 0"><span></span><span><i>i<sub>D</sub></i> = (<i>v<sub>s</sub></i> − <i>v<sub>D</sub></i>) / <i>R</i></span><span>(1)</span></div><div style="display:flex;justify-content:center"><svg width="110" height="74" viewBox="0 0 200 135" fill="none" stroke="#111" stroke-width="2"><path d="M30 15V55M30 85V120H170V73M30 15H80M130 15H170V55"></path><circle cx="30" cy="70" r="15"></circle><polyline points="80,15 85,15 89,8 97,22 105,8 113,22 121,8 125,15 130,15"></polyline><polygon points="160,55 180,55 170,72"></polygon><path d="M160 73H180"></path></svg></div><div style="text-align:center">Figur 2: Diodekretsen fra introkurset tegnet med CircuiTikZ.</div><div style="text-align:justify">Spenningen over lysdioden ble målt med multimeter parallelt over komponenten, mens strømmen ble målt i serie med formotstanden.</div></div>
+<div style="display:flex;flex-direction:column;gap:6px"><div style="font-size:10px;font-weight:600">4 Resultater</div><div style="font-size:8.5px;font-weight:600">4.1 Et plott</div><div style="text-align:justify">Plott kan genereres direkte i LaTeX ved hjelp av pakkene tikZ og pgfplots, som er inkludert i starten av filen.</div><div style="height:96px;border-left:1px solid #111;border-bottom:1px solid #111;margin:4px 6px;background-image:linear-gradient(#eee 1px,transparent 1px),linear-gradient(90deg,#eee 1px,transparent 1px);background-size:12px 12px;position:relative"><svg style="position:absolute;inset:0" width="100%" height="100%" viewBox="0 0 160 96" preserveAspectRatio="none" fill="none" stroke="oklch(0.5 0.15 250)" stroke-width="1.2"><polyline points="0,96 36,96 44,90 50,40 54,6 160,7"></polyline></svg></div><div style="text-align:center">Figur 3: Drainstrøm som funksjon av <i>v<sub>GS</sub></i>.</div><div style="font-size:10px;font-weight:600;margin-top:4px">5 Diskusjon</div><div style="text-align:justify">Diskusjonsdelen inneholder vurderinger og refleksjoner rundt resultatene, feilkilder og usikkerhet, og hvordan resultatene stemmer overens med teori og forventninger.</div></div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+
+<!-- 1b -->
+<div id="1b" style="position:relative;display:flex;flex-direction:column;gap:16px">
+<div style="display:flex;align-items:center;gap:12px"><div style="background:#1f1e1c;color:#fff;font-weight:600;font-size:15px;padding:4px 10px;border-radius:6px">1b</div><div style="font-size:18px;font-weight:500">Mørk, blokkbasert. «/»-meny for innsetting, koden vises per blokk.</div></div>
+<div style="width:1440px;height:900px;border-radius:12px;overflow:hidden;background:#17181a;box-shadow:0 30px 80px rgba(0,0,0,.3),0 0 0 1px rgba(0,0,0,.5);display:flex;flex-direction:column;font-family:'IBM Plex Sans',sans-serif;color:#e6e3dd">
+<div style="height:48px;flex:none;display:flex;align-items:center;gap:16px;padding:0 16px;background:#1d1e21;border-bottom:1px solid #2b2d31">
+<div style="display:flex;gap:8px"><div style="width:12px;height:12px;border-radius:50%;background:#ff5f57"></div><div style="width:12px;height:12px;border-radius:50%;background:#febc2e"></div><div style="width:12px;height:12px;border-radius:50%;background:#28c840"></div></div>
+<div style="font-size:13px;color:#8e8b85;margin-left:60px">Oblig 4 – Gamepad-emulator</div>
+<div style="flex:1"></div>
+<div style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:oklch(0.8 0.13 85)">● 3 redigerer</div>
+<div style="padding:5px 12px;border-radius:6px;border:1px solid #3a3c41;font-size:12px">Del</div>
+<div style="padding:5px 12px;border-radius:6px;background:oklch(0.8 0.13 85);color:#17181a;font-size:12px;font-weight:600">Kompiler ⌘↵</div>
+</div>
+<div style="flex:1;display:flex;min-height:0">
+<div style="width:56px;flex:none;border-right:1px solid #2b2d31;display:flex;flex-direction:column;align-items:center;gap:8px;padding-top:14px;font-size:15px;color:#8e8b85">
+<div style="width:36px;height:36px;border-radius:8px;background:#2b2d31;color:#e6e3dd;display:flex;align-items:center;justify-content:center">§</div><div style="width:36px;height:36px;display:flex;align-items:center;justify-content:center">⏚</div><div style="width:36px;height:36px;display:flex;align-items:center;justify-content:center">Ω</div><div style="width:36px;height:36px;display:flex;align-items:center;justify-content:center">💬</div>
+</div>
+<div style="flex:1;min-width:0;padding:36px 0 0;display:flex;flex-direction:column;gap:4px;font-size:15px;line-height:1.6">
+<div style="display:grid;grid-template-columns:96px minmax(0,1fr) 40px;align-items:baseline"><div style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#5d5b57;text-align:right;padding-right:18px">section</div><div style="font-size:24px;font-weight:600">3  Praktisk arbeid</div></div>
+<div style="display:grid;grid-template-columns:96px minmax(0,1fr) 40px;padding:6px 0"><div style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#5d5b57;text-align:right;padding-right:18px;padding-top:4px">avsnitt</div><div style="color:#cfccc6;text-wrap:pretty">Kretsen ble koblet opp på breadboard som vist i <span style="color:oklch(0.8 0.13 85);border-bottom:1px dashed oklch(0.8 0.13 85)">Figur 2</span>. Kilden gir <span style="font-family:'STIX Two Text',serif;font-style:italic;font-size:17px">v<sub>s</sub></span> = <span style="padding:0 6px;border-radius:4px;background:#2b2d31;color:#fff">9 V</span> over en formotstand.</div></div>
+<div style="display:grid;grid-template-columns:96px minmax(0,1fr) 40px;padding:6px 0"><div style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:oklch(0.8 0.13 85);text-align:right;padding-right:18px;padding-top:14px">figur</div>
+<div style="border:1px solid oklch(0.8 0.13 85 / .6);border-radius:10px;overflow:hidden;background:#1d1e21">
+<div style="padding:18px;display:flex;flex-direction:column;align-items:center;gap:8px"><svg width="220" height="140" viewBox="0 0 200 135" fill="none" stroke="#e6e3dd" stroke-width="1.4"><path d="M30 15V55M30 85V120H170V73M30 15H80M130 15H170V55"></path><circle cx="30" cy="70" r="15"></circle><polyline points="80,15 85,15 89,8 97,22 105,8 113,22 121,8 125,15 130,15"></polyline><polygon points="160,55 180,55 170,72"></polygon><path d="M160 73H180"></path><text x="92" y="35" font-size="10" stroke="none" fill="#e6e3dd">220 Ω</text></svg><div style="font-size:13px;color:#a8a59f">Figur 2: Diodekretsen fra introkurset tegnet med CircuiTikZ.</div></div>
+<div style="border-top:1px solid #2b2d31;background:#141517;padding:12px 16px;font-family:'IBM Plex Mono',monospace;font-size:12px;line-height:1.7;color:#a8a59f">
+<div><span style="color:#c792ea">\begin</span>{circuitikz}[american]</div>
+<div>  <span style="color:#c792ea">\draw</span> (0,0) to[V,l={$v_s=<span style="color:oklch(0.8 0.13 85)">\qty{9}{\volt}</span>$},invert] (0,2);</div>
+<div>  <span style="color:#c792ea">\draw</span> (0,2) to[R, l=<span style="color:oklch(0.8 0.13 85)">\qty{220}{\ohm}</span>,european] (2,2);</div>
+<div>  <span style="color:#c792ea">\draw</span> (2,2) to[led] (2,0); <span style="color:#c792ea">\draw</span> (0,0) -- (2,0);</div>
+<div><span style="color:#c792ea">\end</span>{circuitikz}</div>
+</div></div>
+<div style="font-size:12px;color:#5d5b57;padding:16px 0 0 10px;line-height:1.4">kode<br>vist</div></div>
+<div style="display:grid;grid-template-columns:96px minmax(0,1fr) 40px;padding:6px 0;position:relative"><div style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#5d5b57;text-align:right;padding-right:18px;padding-top:4px">avsnitt</div><div style="color:#cfccc6">Strømmen gjennom lysdioden er <span style="color:oklch(0.8 0.13 85)">/enh</span><span style="display:inline-block;width:2px;height:18px;background:oklch(0.8 0.13 85);vertical-align:middle"></span></div>
+<div style="position:absolute;left:300px;top:40px;width:340px;background:#25272b;border:1px solid #3a3c41;border-radius:10px;box-shadow:0 20px 50px rgba(0,0,0,.5);padding:6px;font-size:13px">
+<div style="padding:6px 10px;font-size:11px;color:#8e8b85;font-family:'IBM Plex Mono',monospace">SETT INN</div>
+<div style="display:flex;align-items:center;gap:12px;padding:8px 10px;border-radius:6px;background:#33353a"><div style="width:28px;height:28px;border-radius:6px;background:#17181a;display:flex;align-items:center;justify-content:center;color:oklch(0.8 0.13 85)">Ω</div><div style="flex:1"><div>Verdi med enhet</div><div style="font-size:11px;color:#8e8b85;font-family:'IBM Plex Mono',monospace">\qty{…}{…}</div></div></div>
+<div style="display:flex;align-items:center;gap:12px;padding:8px 10px"><div style="width:28px;height:28px;border-radius:6px;background:#17181a;display:flex;align-items:center;justify-content:center">µ</div><div style="flex:1"><div>Kun enhet</div><div style="font-size:11px;color:#8e8b85;font-family:'IBM Plex Mono',monospace">\unit{…}</div></div></div>
+<div style="display:flex;align-items:center;gap:12px;padding:8px 10px"><div style="width:28px;height:28px;border-radius:6px;background:#17181a;display:flex;align-items:center;justify-content:center;font-family:'STIX Two Text',serif;font-style:italic">v</div><div style="flex:1"><div>Størrelse med indeks</div><div style="font-size:11px;color:#8e8b85;font-family:'IBM Plex Mono',monospace">$v_{s}$</div></div></div>
+</div></div>
+</div>
+<div style="width:500px;flex:none;background:#0f1011;border-left:1px solid #2b2d31;display:flex;flex-direction:column">
+<div style="height:40px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 16px;font-size:12px;color:#8e8b85;font-family:'IBM Plex Mono',monospace"><span>main.pdf</span><span>2/3</span></div>
+<div style="flex:1;display:flex;justify-content:center;padding-top:12px;overflow:hidden">
+<div style="width:440px;height:622px;flex:none;background:#fff;padding:38px 34px;display:grid;grid-template-columns:1fr 1fr;gap:16px;font-family:'STIX Two Text',serif;font-size:7.4px;line-height:1.45;color:#111;align-content:start">
+<div style="display:flex;flex-direction:column;gap:6px"><div style="font-size:10px;font-weight:600">3 Praktisk arbeid</div><div style="text-align:justify">Kretsen ble koblet opp på breadboard som vist i Figur 2. Kilden gir <i>v<sub>s</sub></i> = 9 V over en formotstand.</div><div style="display:flex;justify-content:center;outline:1.5px solid oklch(0.75 0.14 85);outline-offset:3px"><svg width="110" height="74" viewBox="0 0 200 135" fill="none" stroke="#111" stroke-width="2"><path d="M30 15V55M30 85V120H170V73M30 15H80M130 15H170V55"></path><circle cx="30" cy="70" r="15"></circle><polyline points="80,15 85,15 89,8 97,22 105,8 113,22 121,8 125,15 130,15"></polyline><polygon points="160,55 180,55 170,72"></polygon><path d="M160 73H180"></path></svg></div><div style="text-align:center">Figur 2: Diodekretsen fra introkurset tegnet med CircuiTikZ.</div><div style="text-align:justify">Strømmen gjennom lysdioden er gitt ved (1).</div></div>
+<div style="display:flex;flex-direction:column;gap:6px"><div style="font-size:10px;font-weight:600">4 Resultater</div><div style="text-align:justify">Plott kan genereres direkte i LaTeX ved hjelp av pakkene tikZ og pgfplots.</div></div>
+</div></div></div>
+</div>
+</div>
+</div>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:8px;max-width:900px;margin-top:40px"><div style="font-size:28px;font-weight:600;letter-spacing:-.01em">Resten av skjermene · retning 1a</div></div>
+
+<div style="display:flex;flex-wrap:wrap;gap:96px">
+
+<!-- 1c Circuit editor -->
+<div id="1c" style="display:flex;flex-direction:column;gap:16px">
+<div style="display:flex;align-items:center;gap:12px"><div style="background:#1f1e1c;color:#fff;font-weight:600;font-size:15px;padding:4px 10px;border-radius:6px">1c</div><div style="font-size:18px;font-weight:500">Kretsskjema-editor. Lerret og CircuiTikZ-kode synkronisert begge veier.</div></div>
+<div style="width:1440px;height:900px;border-radius:12px;overflow:hidden;background:#fbfaf8;box-shadow:0 30px 80px rgba(0,0,0,.18),0 0 0 1px rgba(0,0,0,.12);display:flex;flex-direction:column">
+<div style="height:52px;flex:none;display:flex;align-items:center;gap:16px;padding:0 16px;background:#f3f1ed;border-bottom:1px solid #e2dfd9">
+<div style="display:flex;gap:8px"><div style="width:12px;height:12px;border-radius:50%;background:#ff5f57"></div><div style="width:12px;height:12px;border-radius:50%;background:#febc2e"></div><div style="width:12px;height:12px;border-radius:50%;background:#28c840"></div></div>
+<div style="width:40px"></div>
+<div style="display:flex;align-items:center;gap:6px;font-size:13px;color:#7a766f"><span>main.tex</span><span>/</span><span style="color:#1f1e1c;font-weight:600">kretsskjema.kob</span></div>
+<div style="flex:1;display:flex;justify-content:center;gap:4px;font-size:12px;color:#4a4742"><div style="padding:5px 10px;border-radius:6px;background:#fff;border:1px solid #e2dfd9">Velg V</div><div style="padding:5px 10px">Ledning W</div><div style="padding:5px 10px">Etikett T</div><div style="padding:5px 10px">Node .</div><div style="width:1px;background:#e2dfd9;margin:0 6px"></div><div style="padding:5px 10px">Roter R</div><div style="padding:5px 10px">Speil M</div><div style="padding:5px 10px">Europeisk ▾</div></div>
+<div style="padding:6px 14px;border-radius:7px;border:1px solid #d6d2cb;font-size:13px">Avbryt</div>
+<div style="padding:6px 14px;border-radius:7px;background:oklch(0.52 0.15 250);color:#fff;font-size:13px;font-weight:600">Sett inn som Figur 1</div>
+</div>
+<div style="flex:1;display:flex;min-height:0">
+<div style="width:220px;flex:none;background:#f3f1ed;border-right:1px solid #e2dfd9;padding:14px 10px;display:flex;flex-direction:column;gap:16px;font-size:13px">
+<div style="padding:6px 10px;border-radius:7px;background:#fff;border:1px solid #e2dfd9;color:#a29e97">Søk komponent…</div>
+<div style="display:flex;flex-direction:column;gap:6px"><div style="font-size:11px;font-weight:600;color:#8d8982;letter-spacing:.04em;padding-left:4px">PASSIVE</div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+<div style="background:#fff;border:1px solid #e2dfd9;border-radius:8px;padding:8px;display:flex;flex-direction:column;align-items:center;gap:4px"><svg width="48" height="20" viewBox="0 0 48 20" fill="none" stroke="#1f1e1c" stroke-width="1.3"><polyline points="0,10 10,10 13,4 18,16 23,4 28,16 33,4 36,10 48,10"></polyline></svg><div style="font-size:12px">Motstand</div></div>
+<div style="background:#fff;border:1px solid #e2dfd9;border-radius:8px;padding:8px;display:flex;flex-direction:column;align-items:center;gap:4px"><svg width="48" height="20" viewBox="0 0 48 20" fill="none" stroke="#1f1e1c" stroke-width="1.3"><path d="M0 10H21M27 10H48M21 2V18M27 2V18"></path></svg><div style="font-size:12px">Kondensator</div></div>
+<div style="background:#fff;border:1px solid #e2dfd9;border-radius:8px;padding:8px;display:flex;flex-direction:column;align-items:center;gap:4px"><svg width="48" height="20" viewBox="0 0 48 20" fill="none" stroke="#1f1e1c" stroke-width="1.3"><path d="M0 12H8a4 4 0 0 1 8 0a4 4 0 0 1 8 0a4 4 0 0 1 8 0a4 4 0 0 1 8 0H48"></path></svg><div style="font-size:12px">Spole</div></div>
+<div style="background:#fff;border:1px solid #e2dfd9;border-radius:8px;padding:8px;display:flex;flex-direction:column;align-items:center;gap:4px"><svg width="48" height="20" viewBox="0 0 48 20" fill="none" stroke="#1f1e1c" stroke-width="1.3"><path d="M0 10H16M32 10H48M16 3V17"></path><polygon points="16,10 32,3 32,17"></polygon></svg><div style="font-size:12px">LED</div></div>
+</div></div>
+<div style="display:flex;flex-direction:column;gap:6px"><div style="font-size:11px;font-weight:600;color:#8d8982;letter-spacing:.04em;padding-left:4px">LOGIKK</div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+<div style="background:#fff;border:2px solid oklch(0.55 0.15 250);border-radius:8px;padding:7px;display:flex;flex-direction:column;align-items:center;gap:4px"><svg width="48" height="22" viewBox="-4 -4 52 30" fill="none" stroke="#1f1e1c" stroke-width="1.5"><path d="M4 0h20a11 11 0 0 1 0 22h-20z"></path><circle cx="38" cy="11" r="2.5"></circle></svg><div style="font-size:12px">NAND</div></div>
+<div style="background:#fff;border:1px solid #e2dfd9;border-radius:8px;padding:8px;display:flex;flex-direction:column;align-items:center;gap:4px"><svg width="48" height="22" viewBox="-4 -4 52 30" fill="none" stroke="#1f1e1c" stroke-width="1.5"><path d="M4 0h20a11 11 0 0 1 0 22h-20z"></path></svg><div style="font-size:12px">AND</div></div>
+<div style="background:#fff;border:1px solid #e2dfd9;border-radius:8px;padding:8px;display:flex;flex-direction:column;align-items:center;gap:4px"><svg width="48" height="22" viewBox="-4 -4 52 30" fill="none" stroke="#1f1e1c" stroke-width="1.5"><polygon points="6,0 30,11 6,22"></polygon><circle cx="34" cy="11" r="2.5"></circle></svg><div style="font-size:12px">NOT</div></div>
+<div style="background:#fff;border:1px solid #e2dfd9;border-radius:8px;padding:8px;display:flex;flex-direction:column;align-items:center;gap:4px"><svg width="48" height="22" viewBox="-4 -4 52 30" fill="none" stroke="#1f1e1c" stroke-width="1.5"><path d="M2 0q8 11 0 22q22 0 32-11q-10-11-32-11z"></path><circle cx="38" cy="11" r="2.5"></circle></svg><div style="font-size:12px">NOR</div></div>
+</div></div>
+<div style="display:flex;flex-direction:column;gap:2px;color:#4a4742"><div style="font-size:11px;font-weight:600;color:#8d8982;letter-spacing:.04em;padding:0 4px 4px">KILDER OG DIVERSE</div><div style="padding:4px">+5 V / VCC</div><div style="padding:4px">Jord</div><div style="padding:4px">Trykknapp</div><div style="padding:4px">USB-C / DC-kilde</div><div style="padding:4px">IC-blokk (74HC00N)</div><div style="padding:4px">Stiplet ramme «i lokket»</div></div>
+</div>
+<div style="flex:1;min-width:0;display:flex;flex-direction:column">
+<div style="flex:1;position:relative;background-color:#fdfcfa;background-image:radial-gradient(#d9d5ce 1px,transparent 1px);background-size:16px 16px;overflow:hidden">
+<svg style="position:absolute;left:40px;top:30px" width="860" height="470" viewBox="0 0 860 470" fill="none" stroke="#1f1e1c" stroke-width="1.3" font-family="STIX Two Text">
+<rect x="70" y="20" width="250" height="125" stroke="#a29e97" stroke-dasharray="5 4"></rect><text x="314" y="138" font-size="11" fill="#8d8982" stroke="none" text-anchor="end">i lokket</text>
+<path d="M120 60V92M114 44l6-8 6 8M120 36V60"></path><text x="120" y="30" font-size="14" fill="#1f1e1c" stroke="none" text-anchor="middle">+5 V</text>
+<circle cx="120" cy="95" r="3"></circle><circle cx="120" cy="125" r="3"></circle><path d="M130 100V120M130 110H138"></path><text x="102" y="115" font-size="14" font-style="italic" fill="#1f1e1c" stroke="none" text-anchor="end">S<tspan font-size="10" dy="3">U</tspan></text>
+<path d="M260 60V92M254 44l6-8 6 8M260 36V60"></path><text x="260" y="30" font-size="14" fill="#1f1e1c" stroke="none" text-anchor="middle">+5 V</text>
+<circle cx="260" cy="95" r="3"></circle><circle cx="260" cy="125" r="3"></circle><path d="M270 100V120M270 110H278"></path><text x="242" y="115" font-size="14" font-style="italic" fill="#1f1e1c" stroke="none" text-anchor="end">S<tspan font-size="10" dy="3">D</tspan></text>
+<path d="M120 128V440M260 128V440"></path>
+<path d="M120 170H70V185"></path><polyline points="70,185 70,190 76,194 64,200 76,206 64,212 76,218 64,224 70,228 70,240"></polyline><path d="M70 240V262M60 262H80M64 267H76M68 272H72"></path><text x="56" y="214" font-size="12" fill="#1f1e1c" stroke="none" text-anchor="end">R₁ 10 kΩ</text>
+<path d="M260 170H210V185"></path><polyline points="210,185 210,190 216,194 204,200 216,206 204,212 216,218 204,224 210,228 210,240"></polyline><path d="M210 240V262M200 262H220M204 267H216M208 272H212"></path><text x="196" y="214" font-size="12" fill="#1f1e1c" stroke="none" text-anchor="end">R₂ 10 kΩ</text>
+<circle cx="120" cy="170" r="2.5" fill="#1f1e1c"></circle><circle cx="260" cy="170" r="2.5" fill="#1f1e1c"></circle>
+<text x="132" y="200" font-size="16" font-style="italic" fill="#1f1e1c" stroke="none">U</text><text x="272" y="200" font-size="16" font-style="italic" fill="#1f1e1c" stroke="none">D</text>
+<path d="M260 310H290"></path><circle cx="260" cy="310" r="2.5" fill="#1f1e1c"></circle>
+<g transform="translate(290,295)"><path d="M0 0h20a15 15 0 0 1 0 30h-20z"></path><circle cx="38" cy="15" r="3"></circle></g><text x="300" y="288" font-size="11" fill="#1f1e1c" stroke="none" font-weight="600">G2</text><text x="318" y="288" font-size="10" fill="#8d8982" stroke="none">IC1</text>
+<path d="M331 310H370V372H420"></path><text x="378" y="340" font-size="14" font-style="italic" fill="#1f1e1c" stroke="none">D̄</text>
+<path d="M120 358H420"></path><circle cx="120" cy="358" r="2.5" fill="#1f1e1c"></circle>
+<g transform="translate(420,350)"><path d="M0 0h20a15 15 0 0 1 0 30h-20z"></path><circle cx="38" cy="15" r="3"></circle></g><text x="420" y="342" font-size="11" fill="#1f1e1c" stroke="none" font-weight="600">G5</text><text x="438" y="342" font-size="10" fill="#8d8982" stroke="none">IC2</text><text x="410" y="354" font-size="9" fill="#1f1e1c" stroke="none">1</text><text x="410" y="378" font-size="9" fill="#1f1e1c" stroke="none">2</text>
+<path d="M461 365H540"></path><text x="478" y="358" font-size="13" font-style="italic" fill="#1f1e1c" stroke="none">c</text>
+<g transform="translate(540,350)"><path d="M0 0h20a15 15 0 0 1 0 30h-20z"></path><circle cx="38" cy="15" r="3"></circle></g><text x="540" y="342" font-size="11" fill="#1f1e1c" stroke="none" font-weight="600">G9</text><text x="558" y="342" font-size="10" fill="#8d8982" stroke="none">IC3</text>
+<path d="M581 365H650"></path><text x="612" y="355" font-size="15" font-style="italic" fill="#1f1e1c" stroke="none">Y<tspan font-size="10" dy="3">U</tspan></text>
+<polyline points="650,365 656,365 660,358 667,372 674,358 681,372 688,358 692,365 700,365" stroke="oklch(0.5 0.15 250)" stroke-width="1.8"></polyline>
+<rect x="644" y="338" width="62" height="40" stroke="oklch(0.55 0.15 250)" stroke-dasharray="3 3"></rect>
+<rect x="641" y="335" width="6" height="6" fill="#fff" stroke="oklch(0.55 0.15 250)"></rect><rect x="703" y="335" width="6" height="6" fill="#fff" stroke="oklch(0.55 0.15 250)"></rect><rect x="641" y="375" width="6" height="6" fill="#fff" stroke="oklch(0.55 0.15 250)"></rect><rect x="703" y="375" width="6" height="6" fill="#fff" stroke="oklch(0.55 0.15 250)"></rect>
+<text x="675" y="330" font-size="12" fill="oklch(0.45 0.15 250)" stroke="none" text-anchor="middle">R₅ 470 Ω</text>
+<path d="M700 365H760V385"></path><polygon points="750,385 770,385 760,402" fill="#fff"></polygon><path d="M750 403H770M760 403V430M750 430H770M754 435H766M758 440H762M773 390l8-6M775 397l8-6"></path><text x="782" y="402" font-size="12" fill="#1f1e1c" stroke="none">LED Y<tspan font-size="9" dy="3">U</tspan></text>
+<rect x="730" y="345" width="110" height="105" stroke="#a29e97" stroke-dasharray="5 4"></rect>
+</svg>
+<div style="position:absolute;left:24px;bottom:16px;display:flex;gap:8px;font-size:12px;color:#6b6862"><div style="padding:4px 10px;background:#fff;border:1px solid #e2dfd9;border-radius:6px">Rutenett 0,5 cm</div><div style="padding:4px 10px;background:#fff;border:1px solid #e2dfd9;border-radius:6px">100 %</div><div style="padding:4px 10px;background:#fff;border:1px solid #e2dfd9;border-radius:6px">Auto-ruting av ledninger: på</div></div>
+</div>
+<div style="height:200px;flex:none;border-top:1px solid #e2dfd9;background:#f6f4f0;display:flex;flex-direction:column">
+<div style="height:34px;flex:none;display:flex;align-items:center;gap:14px;padding:0 16px;font-size:12px;color:#6b6862;border-bottom:1px solid #e9e6e0"><span style="font-weight:600;color:#3d3a36">CircuiTikZ</span><span>Redigerbar · endringer vises på lerretet</span><div style="flex:1"></div><span>Kopier</span></div>
+<div style="flex:1;padding:8px 0;font-family:'JetBrains Mono',monospace;font-size:12.5px;line-height:1.75;color:#3d3a36;overflow:hidden">
+<div style="display:flex;padding:0 16px"><span style="width:28px;color:#b5b0a8">1</span><span><span style="color:oklch(0.5 0.15 300)">\begin</span>{circuitikz}[european]</span></div>
+<div style="display:flex;padding:0 16px"><span style="width:28px;color:#b5b0a8">2</span><span>  <span style="color:oklch(0.5 0.15 300)">\draw</span> (0,8) node[vcc]{$+<span style="color:oklch(0.5 0.15 250)">\qty</span>{5}{<span style="color:oklch(0.5 0.15 30)">\volt</span>}$} to[push button, l=$S_U$] (0,6);</span></div>
+<div style="display:flex;padding:0 16px"><span style="width:28px;color:#b5b0a8">3</span><span>  <span style="color:oklch(0.5 0.15 300)">\draw</span> (0,5) -| (-1,4) to[R, l=$R_1$, a=<span style="color:oklch(0.5 0.15 250)">\qty</span>{10}{<span style="color:oklch(0.5 0.15 30)">\kilo\ohm</span>}] (-1,2) node[ground]{};</span></div>
+<div style="display:flex;padding:0 16px"><span style="width:28px;color:#b5b0a8">4</span><span>  <span style="color:oklch(0.5 0.15 300)">\node</span>[nand port] (G5) at (8,1) {}; <span style="color:#a29e97">% G5, IC2</span></span></div>
+<div style="display:flex;padding:0 16px;background:oklch(0.94 0.035 250)"><span style="width:28px;color:oklch(0.5 0.15 250)">5</span><span>  <span style="color:oklch(0.5 0.15 300)">\draw</span> (G9.out) -- (11,1) to[R, l=$R_5$, a=<span style="color:oklch(0.5 0.15 250)">\qty</span>{470}{<span style="color:oklch(0.5 0.15 30)">\ohm</span>}] (12.5,1);</span></div>
+<div style="display:flex;padding:0 16px"><span style="width:28px;color:#b5b0a8">6</span><span>  <span style="color:oklch(0.5 0.15 300)">\draw</span> (13,1) to[led, l=LED $Y_U$] (13,-1) node[ground]{};</span></div>
+</div></div>
+</div>
+<div style="width:280px;flex:none;border-left:1px solid #e2dfd9;background:#fbfaf8;padding:18px 16px;display:flex;flex-direction:column;gap:18px;font-size:13px">
+<div><div style="font-size:11px;font-weight:600;color:#8d8982;letter-spacing:.04em">VALGT</div><div style="font-size:17px;font-weight:600;margin-top:4px">Motstand</div></div>
+<div style="display:flex;flex-direction:column;gap:6px"><div style="color:#6b6862">Navn</div><div style="padding:7px 10px;background:#fff;border:1px solid #e2dfd9;border-radius:7px;font-family:'STIX Two Text',serif;font-style:italic;font-size:15px">R<sub style="font-size:11px">5</sub></div></div>
+<div style="display:flex;flex-direction:column;gap:6px"><div style="color:#6b6862">Verdi</div><div style="display:flex;gap:6px"><div style="flex:1;padding:7px 10px;background:#fff;border:1px solid oklch(0.55 0.15 250);border-radius:7px">470</div><div style="padding:7px 10px;background:#fff;border:1px solid #e2dfd9;border-radius:7px">– ▾</div><div style="padding:7px 10px;background:#fff;border:1px solid #e2dfd9;border-radius:7px">Ω ▾</div></div><div style="font-family:'JetBrains Mono',monospace;font-size:11.5px;color:#8d8982">\qty{470}{\ohm}</div></div>
+<div style="display:flex;flex-direction:column;gap:6px"><div style="color:#6b6862">Etikett plassering</div><div style="display:flex;background:#ece9e3;border-radius:7px;padding:2px;font-size:12px"><div style="flex:1;text-align:center;padding:4px;border-radius:5px;background:#fff">Over</div><div style="flex:1;text-align:center;padding:4px">Under</div><div style="flex:1;text-align:center;padding:4px">Skjult</div></div></div>
+<div style="display:flex;flex-direction:column;gap:6px"><div style="color:#6b6862">Stil</div><div style="display:flex;background:#ece9e3;border-radius:7px;padding:2px;font-size:12px"><div style="flex:1;text-align:center;padding:4px;border-radius:5px;background:#fff">Sikksakk (US)</div><div style="flex:1;text-align:center;padding:4px">Boks (EU)</div></div></div>
+<div style="display:flex;flex-direction:column;gap:6px"><div style="color:#6b6862">Koblingspunkt (valgfritt)</div><div style="padding:7px 10px;background:#fff;border:1px solid #e2dfd9;border-radius:7px">J1-6</div></div>
+<div style="height:1px;background:#e9e6e0"></div>
+<div style="display:flex;flex-direction:column;gap:6px"><div style="font-size:11px;font-weight:600;color:#8d8982;letter-spacing:.04em">PORTER I SKJEMAET</div><div style="display:flex;justify-content:space-between;color:#4a4742"><span>NAND, 2-inngangs</span><span>20</span></div><div style="display:flex;justify-content:space-between;color:#4a4742"><span>74HC00N trengs</span><span>5</span></div><div style="color:#8d8982;font-size:12px;line-height:1.4">Pinnenummer fordeles automatisk per IC.</div></div>
+</div>
+</div>
+</div>
+</div>
+
+<!-- 1d Symbol picker -->
+<div id="1d" style="display:flex;flex-direction:column;gap:16px">
+<div style="display:flex;align-items:center;gap:12px"><div style="background:#1f1e1c;color:#fff;font-weight:600;font-size:15px;padding:4px 10px;border-radius:6px">1d</div><div style="font-size:18px;font-weight:500">Symbol- og enhetsvelger (⌘E)</div></div>
+<div style="width:760px;border-radius:14px;background:#fff;box-shadow:0 30px 80px rgba(0,0,0,.2),0 0 0 1px rgba(0,0,0,.1);display:flex;flex-direction:column;overflow:hidden">
+<div style="padding:14px 16px;border-bottom:1px solid #ebe8e3;display:flex;align-items:center;gap:10px"><div style="flex:1;font-size:16px;color:#1f1e1c">kilo<span style="display:inline-block;width:1.5px;height:18px;background:oklch(0.55 0.15 250);vertical-align:middle;margin-left:1px"></span></div><div style="font-size:12px;color:#8d8982">↑↓ velg · ↵ sett inn · ⇥ neste felt</div></div>
+<div style="display:flex;min-height:0">
+<div style="width:170px;flex:none;background:#f6f4f0;border-right:1px solid #ebe8e3;padding:10px;display:flex;flex-direction:column;gap:2px;font-size:13px;color:#4a4742"><div style="padding:6px 10px;border-radius:6px;background:#fff;font-weight:600;color:#1f1e1c">Verdi med enhet</div><div style="padding:6px 10px">Enheter</div><div style="padding:6px 10px">Prefikser</div><div style="padding:6px 10px">Størrelser</div><div style="padding:6px 10px">Greske bokstaver</div><div style="padding:6px 10px">Operatorer</div><div style="padding:6px 10px">Komplekse tall</div><div style="padding:6px 10px">Mine favoritter</div></div>
+<div style="flex:1;padding:18px 20px;display:flex;flex-direction:column;gap:18px">
+<div style="display:flex;align-items:flex-end;gap:8px">
+<div style="display:flex;flex-direction:column;gap:5px"><div style="font-size:12px;color:#6b6862">Tall</div><div style="width:90px;padding:8px 10px;border:1px solid #e2dfd9;border-radius:7px;font-size:15px">10</div></div>
+<div style="display:flex;flex-direction:column;gap:5px"><div style="font-size:12px;color:#6b6862">Prefiks</div><div style="width:90px;padding:8px 10px;border:2px solid oklch(0.55 0.15 250);border-radius:7px;font-size:15px">k  kilo</div></div>
+<div style="display:flex;flex-direction:column;gap:5px"><div style="font-size:12px;color:#6b6862">Enhet</div><div style="width:110px;padding:8px 10px;border:1px solid #e2dfd9;border-radius:7px;font-size:15px">Ω  ohm</div></div>
+<div style="flex:1"></div>
+<div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px"><div style="font-family:'STIX Two Text',serif;font-size:28px">10 kΩ</div><div style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#8d8982">\qty{10}{\kilo\ohm}</div></div>
+</div>
+<div style="display:flex;flex-direction:column;gap:8px"><div style="font-size:11px;font-weight:600;color:#8d8982;letter-spacing:.04em">PREFIKSER</div>
+<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px">
+<sc-for list="{{ prefixes }}" as="p" hint-placeholder-count="7"><div style="border:1px solid #e2dfd9;border-radius:8px;padding:8px 4px;display:flex;flex-direction:column;align-items:center;gap:2px"><div style="font-family:'STIX Two Text',serif;font-size:20px">{{ p.s }}</div><div style="font-size:11px;color:#8d8982">{{ p.n }}</div></div></sc-for>
+</div></div>
+<div style="display:flex;flex-direction:column;gap:8px"><div style="font-size:11px;font-weight:600;color:#8d8982;letter-spacing:.04em">ENHETER</div>
+<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px">
+<sc-for list="{{ units }}" as="u" hint-placeholder-count="14"><div style="border:1px solid #e2dfd9;border-radius:8px;padding:8px 4px;display:flex;flex-direction:column;align-items:center;gap:2px"><div style="font-family:'STIX Two Text',serif;font-size:20px">{{ u.s }}</div><div style="font-size:11px;color:#8d8982">{{ u.n }}</div></div></sc-for>
+</div></div>
+<div style="display:flex;flex-direction:column;gap:8px"><div style="font-size:11px;font-weight:600;color:#8d8982;letter-spacing:.04em">STØRRELSER OG SYMBOLER</div>
+<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px">
+<sc-for list="{{ symbols }}" as="u" hint-placeholder-count="7"><div style="border:1px solid #e2dfd9;border-radius:8px;padding:8px 4px;display:flex;flex-direction:column;align-items:center;gap:2px"><div style="font-family:'STIX Two Text',serif;font-style:italic;font-size:20px">{{ u.s }}</div><div style="font-size:11px;color:#8d8982;font-family:'JetBrains Mono',monospace">{{ u.n }}</div></div></sc-for>
+</div></div>
+<div style="display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-radius:8px;background:oklch(0.96 0.03 75);font-size:13px;color:#6b4a1a;line-height:1.45"><b>Notasjon:</b><span>Malen krever <i style="font-family:'STIX Two Text',serif;font-size:15px">v</i> for spenning, ikke <i style="font-family:'STIX Two Text',serif;font-size:15px">U</i>. Små bokstaver for størrelser som varierer.</span></div>
+</div></div></div>
+</div>
+
+<!-- 1e Collab -->
+<div id="1e" style="display:flex;flex-direction:column;gap:16px">
+<div style="display:flex;align-items:center;gap:12px"><div style="background:#1f1e1c;color:#fff;font-weight:600;font-size:15px;padding:4px 10px;border-radius:6px">1e</div><div style="font-size:18px;font-weight:500">Samarbeid: live-markører, kommentarer, historikk og delingslenke</div></div>
+<div style="width:1440px;height:900px;border-radius:12px;overflow:hidden;background:#fbfaf8;box-shadow:0 30px 80px rgba(0,0,0,.18),0 0 0 1px rgba(0,0,0,.12);display:flex;flex-direction:column;position:relative">
+<div style="height:52px;flex:none;display:flex;align-items:center;gap:16px;padding:0 16px;background:#f3f1ed;border-bottom:1px solid #e2dfd9">
+<div style="display:flex;gap:8px"><div style="width:12px;height:12px;border-radius:50%;background:#ff5f57"></div><div style="width:12px;height:12px;border-radius:50%;background:#febc2e"></div><div style="width:12px;height:12px;border-radius:50%;background:#28c840"></div></div>
+<div style="width:120px"></div>
+<div style="display:flex;align-items:center;gap:6px;font-size:13px;color:#7a766f"><span>ADK 61</span><span>/</span><span>ELI1300</span><span>/</span><span style="color:#1f1e1c;font-weight:600">Oblig 4 – Gamepad-emulator</span></div>
+<div style="flex:1"></div>
+<div style="display:flex"><div style="width:26px;height:26px;border-radius:50%;background:oklch(0.62 0.13 30);color:#fff;font-size:11px;font-weight:600;display:flex;align-items:center;justify-content:center;border:2px solid #f3f1ed">SK</div><div style="width:26px;height:26px;border-radius:50%;background:oklch(0.62 0.13 150);color:#fff;font-size:11px;font-weight:600;display:flex;align-items:center;justify-content:center;border:2px solid #f3f1ed;margin-left:-8px">MH</div><div style="width:26px;height:26px;border-radius:50%;background:oklch(0.62 0.13 300);color:#fff;font-size:11px;font-weight:600;display:flex;align-items:center;justify-content:center;border:2px solid #f3f1ed;margin-left:-8px">EL</div></div>
+<div style="padding:6px 14px;border-radius:7px;background:oklch(0.52 0.15 250);color:#fff;font-size:13px;font-weight:600;box-shadow:0 0 0 3px oklch(0.85 0.06 250)">Del</div>
+</div>
+<div style="flex:1;display:flex;min-height:0">
+<div style="flex:1;min-width:0;padding:48px 80px;display:flex;flex-direction:column;gap:20px;font-size:16px;line-height:1.65">
+<div style="font-size:26px;font-weight:600"><span style="color:#a29e97;margin-right:12px">5</span>Diskusjon</div>
+<div style="text-wrap:pretty">Målt strøm gjennom lysdioden ble <span style="padding:1px 7px;border-radius:5px;background:oklch(0.96 0.025 250);border:1px solid oklch(0.88 0.05 250);color:oklch(0.4 0.15 250);font-size:14px">31,2 mA</span>, noe høyere enn beregnet. <span style="background:oklch(0.93 0.06 150 / .6);border-bottom:2px solid oklch(0.62 0.13 150)">Avviket skyldes trolig toleransen til formotstanden</span><span style="position:relative;display:inline-block;width:2px;height:20px;background:oklch(0.62 0.13 150);vertical-align:middle"><span style="position:absolute;bottom:20px;left:0;background:oklch(0.62 0.13 150);color:#fff;font-size:11px;font-weight:600;padding:1px 6px;border-radius:4px 4px 4px 0;white-space:nowrap">Mia</span></span> og at diodespenningen var lavere enn databladverdien.</div>
+<div style="text-wrap:pretty">Ved bruk av 74HC00N må hver IC avkobles med en kondensator på <span style="padding:1px 7px;border-radius:5px;background:oklch(0.96 0.025 250);border:1px solid oklch(0.88 0.05 250);color:oklch(0.4 0.15 250);font-size:14px">100 nF</span> så nær pinne 14 og 7 som mulig<span style="position:relative;display:inline-block;width:2px;height:20px;background:oklch(0.62 0.13 300);vertical-align:middle"><span style="position:absolute;bottom:20px;left:0;background:oklch(0.62 0.13 300);color:#fff;font-size:11px;font-weight:600;padding:1px 6px;border-radius:4px 4px 4px 0;white-space:nowrap">Emil</span></span>.</div>
+</div>
+<div style="width:340px;flex:none;border-left:1px solid #e2dfd9;background:#f6f4f0;display:flex;flex-direction:column">
+<div style="display:flex;gap:4px;padding:12px 14px;border-bottom:1px solid #e2dfd9;font-size:13px"><div style="padding:5px 12px;border-radius:6px;background:#fff;font-weight:600">Kommentarer 3</div><div style="padding:5px 12px;color:#6b6862">Historikk</div><div style="padding:5px 12px;color:#6b6862">PDF</div></div>
+<div style="padding:14px;display:flex;flex-direction:column;gap:12px;font-size:13px;line-height:1.45">
+<div style="background:#fff;border:1px solid #e2dfd9;border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:8px"><div style="display:flex;align-items:center;gap:8px"><div style="width:22px;height:22px;border-radius:50%;background:oklch(0.62 0.13 30);color:#fff;font-size:10px;font-weight:600;display:flex;align-items:center;justify-content:center">SK</div><b>Sebastian</b><span style="color:#a29e97">12 min</span></div><div style="color:#3d3a36">Kan vi ta med målt verdi på motstanden også? Da blir avviket begrunnet.</div><div style="font-size:12px;color:#8d8982;border-left:2px solid #e2dfd9;padding-left:8px">«toleransen til formotstanden»</div><div style="display:flex;gap:10px;font-size:12px;color:oklch(0.45 0.15 250);font-weight:500"><span>Svar</span><span>Løs</span></div></div>
+<div style="background:#fff;border:1px solid #e2dfd9;border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:8px"><div style="display:flex;align-items:center;gap:8px"><div style="width:22px;height:22px;border-radius:50%;background:oklch(0.62 0.13 300);color:#fff;font-size:10px;font-weight:600;display:flex;align-items:center;justify-content:center">EL</div><b>Emil</b><span style="color:#a29e97">1 t</span></div><div style="color:#3d3a36">Figur 1 er ikke referert i teksten ennå.</div></div>
+</div>
+<div style="margin-top:auto;padding:14px;border-top:1px solid #e2dfd9;display:flex;flex-direction:column;gap:10px;font-size:13px"><div style="font-size:11px;font-weight:600;color:#8d8982;letter-spacing:.04em">SISTE VERSJONER</div><div style="display:flex;justify-content:space-between"><span>Mia · Diskusjon</span><span style="color:#a29e97">nå</span></div><div style="display:flex;justify-content:space-between"><span>Sebastian · Kretsskjema</span><span style="color:#a29e97">14:02</span></div><div style="display:flex;justify-content:space-between"><span>Levert versjon (Oblig 3)</span><span style="color:#a29e97">i går</span></div></div>
+</div>
+</div>
+<div style="position:absolute;top:60px;right:16px;width:400px;background:#fff;border-radius:12px;box-shadow:0 24px 60px rgba(0,0,0,.2),0 0 0 1px rgba(0,0,0,.08);padding:18px;display:flex;flex-direction:column;gap:16px;font-size:13px">
+<div style="font-size:16px;font-weight:600">Del «Oblig 4»</div>
+<div style="display:flex;gap:8px"><div style="flex:1;padding:8px 10px;border:1px solid #e2dfd9;border-radius:7px;color:#a29e97">Navn eller e-post</div><div style="padding:8px 12px;border-radius:7px;background:oklch(0.52 0.15 250);color:#fff;font-weight:600">Inviter</div></div>
+<div style="display:flex;flex-direction:column;gap:10px">
+<div style="display:flex;align-items:center;gap:10px"><div style="width:28px;height:28px;border-radius:50%;background:oklch(0.62 0.13 30);color:#fff;font-size:11px;font-weight:600;display:flex;align-items:center;justify-content:center">SK</div><div style="flex:1">Sebastian Kristoffersen <span style="color:#a29e97">(deg)</span></div><span style="color:#8d8982">Eier</span></div>
+<div style="display:flex;align-items:center;gap:10px"><div style="width:28px;height:28px;border-radius:50%;background:oklch(0.62 0.13 150);color:#fff;font-size:11px;font-weight:600;display:flex;align-items:center;justify-content:center">MH</div><div style="flex:1">Mia Hansen</div><span>Kan redigere ▾</span></div>
+<div style="display:flex;align-items:center;gap:10px"><div style="width:28px;height:28px;border-radius:50%;background:oklch(0.62 0.13 300);color:#fff;font-size:11px;font-weight:600;display:flex;align-items:center;justify-content:center">EL</div><div style="flex:1">Emil Larsen</div><span>Kan redigere ▾</span></div>
+<div style="display:flex;align-items:center;gap:10px"><div style="width:28px;height:28px;border-radius:50%;background:#e2dfd9;color:#4a4742;font-size:11px;font-weight:600;display:flex;align-items:center;justify-content:center">LA</div><div style="flex:1">Læringsassistent</div><span>Kan kommentere ▾</span></div>
+</div>
+<div style="height:1px;background:#ebe8e3"></div>
+<div style="display:flex;flex-direction:column;gap:8px"><div style="font-weight:600">Lenke</div><div style="display:flex;gap:8px;align-items:center"><div style="flex:1;font-family:'JetBrains Mono',monospace;font-size:12px;padding:8px 10px;background:#f6f4f0;border-radius:7px">kobling.app/d/adk61-oblig4</div><div style="padding:8px 10px;border:1px solid #e2dfd9;border-radius:7px">Kopier</div></div><div style="display:flex;justify-content:space-between;color:#4a4742"><span>Alle med lenken</span><span>Kan lese ▾</span></div><div style="display:flex;justify-content:space-between;color:#4a4742"><span>Gruppemappe</span><span>ADK 61 / ELI1300</span></div></div>
+</div>
+</div>
+</div>
+
+<!-- 1f Web -->
+<div id="1f" style="display:flex;flex-direction:column;gap:16px">
+<div style="display:flex;align-items:center;gap:12px"><div style="background:#1f1e1c;color:#fff;font-weight:600;font-size:15px;padding:4px 10px;border-radius:6px">1f</div><div style="font-size:18px;font-weight:500">Web-versjon. Samme editor, kompilering skjer på serveren.</div></div>
+<div style="width:1440px;height:900px;border-radius:12px;overflow:hidden;background:#fbfaf8;box-shadow:0 30px 80px rgba(0,0,0,.18),0 0 0 1px rgba(0,0,0,.12);display:flex;flex-direction:column">
+<div style="height:44px;flex:none;display:flex;align-items:center;gap:14px;padding:0 14px;background:#dedbd5"><div style="display:flex;gap:8px"><div style="width:12px;height:12px;border-radius:50%;background:#ff5f57"></div><div style="width:12px;height:12px;border-radius:50%;background:#febc2e"></div><div style="width:12px;height:12px;border-radius:50%;background:#28c840"></div></div><div style="padding:6px 14px;background:#fbfaf8;border-radius:8px 8px 0 0;font-size:12px;margin-top:10px;align-self:stretch;display:flex;align-items:center">Oblig 4 – Kobling</div><div style="flex:1;margin:0 120px 0 40px;padding:5px 12px;background:#efece6;border-radius:7px;font-size:12px;color:#6b6862">kobling.app/d/adk61-oblig4</div></div>
+<div style="height:48px;flex:none;display:flex;align-items:center;gap:14px;padding:0 18px;border-bottom:1px solid #e2dfd9">
+<div style="font-weight:700;font-size:15px;letter-spacing:-.01em">Kobling</div><div style="font-size:13px;color:#7a766f">ADK 61 / ELI1300 / <span style="color:#1f1e1c;font-weight:600">Oblig 4</span></div><div style="flex:1"></div>
+<div style="font-size:12px;color:#6b6862;padding:4px 10px;background:#f3f1ed;border-radius:6px">Sebastian redigerer i Mac-appen</div>
+<div style="display:flex"><div style="width:26px;height:26px;border-radius:50%;background:oklch(0.62 0.13 30);color:#fff;font-size:11px;font-weight:600;display:flex;align-items:center;justify-content:center;border:2px solid #fbfaf8">SK</div><div style="width:26px;height:26px;border-radius:50%;background:oklch(0.62 0.13 150);color:#fff;font-size:11px;font-weight:600;display:flex;align-items:center;justify-content:center;border:2px solid #fbfaf8;margin-left:-8px">MH</div></div>
+<div style="padding:6px 14px;border-radius:7px;border:1px solid #d6d2cb;font-size:13px">Last ned PDF</div><div style="padding:6px 14px;border-radius:7px;background:oklch(0.52 0.15 250);color:#fff;font-size:13px;font-weight:600">Del</div>
+</div>
+<div style="height:42px;flex:none;display:flex;align-items:center;gap:4px;padding:0 18px;border-bottom:1px solid #ebe8e3;font-size:13px;color:#3d3a36;white-space:nowrap;overflow:hidden"><div style="padding:4px 10px;border-radius:6px;border:1px solid #e2dfd9;background:#fff">Brødtekst ▾</div><div style="padding:4px 9px;font-weight:700">B</div><div style="padding:4px 9px;font-style:italic">I</div><div style="padding:4px 9px;border-radius:6px;background:oklch(0.95 0.03 250);color:oklch(0.45 0.15 250);font-weight:600">Ω Enhet</div><div style="padding:4px 9px">∑ Ligning</div><div style="padding:4px 9px">⏚ Krets</div><div style="padding:4px 9px">Figur</div><div style="padding:4px 9px">Tabell</div><div style="flex:1"></div><div style="color:#6b6862">Vis kode</div></div>
+<div style="flex:1;display:flex;min-height:0">
+<div style="flex:1;min-width:0;padding:40px 72px;display:flex;flex-direction:column;gap:16px;font-size:16px;line-height:1.6">
+<div style="font-size:26px;font-weight:600"><span style="color:#a29e97;margin-right:12px">1.2</span>Utstyrsliste</div>
+<div>Utstyret som ble benyttet er gitt i <span style="padding:1px 7px;border-radius:5px;background:#efece6;border:1px solid #e2dfd9;font-size:14px">Tabell 1</span>.</div>
+<div style="font-size:14px;color:#4a4742;text-align:center"><b>Tabell 1:</b> Utstyrsliste</div>
+<div style="border:1px solid #e2dfd9;border-radius:8px;overflow:hidden;background:#fff;font-size:14px">
+<div style="display:grid;grid-template-columns:1fr 1fr 1fr;background:#f6f4f0;font-weight:600;border-bottom:1px solid #e2dfd9"><div style="padding:8px 12px">Utstyr</div><div style="padding:8px 12px">Type</div><div style="padding:8px 12px">Fabrikat</div></div>
+<div style="display:grid;grid-template-columns:1fr 1fr 1fr;border-bottom:1px solid #f0ede8"><div style="padding:8px 12px">IC</div><div style="padding:8px 12px">74HC00N</div><div style="padding:8px 12px">Texas Instruments</div></div>
+<div style="display:grid;grid-template-columns:1fr 1fr 1fr;border-bottom:1px solid #f0ede8"><div style="padding:8px 12px">Multimeter</div><div style="padding:8px 12px">Digitalt</div><div style="padding:8px 12px">FLUKE</div></div>
+<div style="display:grid;grid-template-columns:1fr 1fr 1fr;border-bottom:1px solid #f0ede8"><div style="padding:8px 12px">Spenningskilde</div><div style="padding:8px 12px">USB-C <span style="color:oklch(0.4 0.15 250)">5 V</span></div><div style="padding:8px 12px">–</div></div>
+<div style="display:grid;grid-template-columns:1fr 1fr 1fr"><div style="padding:8px 12px">Motstand</div><div style="padding:8px 12px"><span style="color:oklch(0.4 0.15 250)">10 kΩ</span>, <span style="color:oklch(0.4 0.15 250)">470 Ω</span></div><div style="padding:8px 12px;color:#a29e97">+ rad</div></div>
+</div>
+</div>
+<div style="width:520px;flex:none;background:#e9e6e0;border-left:1px solid #e2dfd9;display:flex;justify-content:center;padding-top:24px;overflow:hidden">
+<div style="width:440px;height:622px;flex:none;background:#fff;box-shadow:0 4px 20px rgba(0,0,0,.12);padding:38px 34px;display:flex;flex-direction:column;gap:10px;font-family:'STIX Two Text',serif;font-size:7.4px;line-height:1.45;color:#111">
+<div style="text-align:center;font-size:14px;margin-top:6px">Gamepad-emulator med NAND-porter</div><div style="text-align:center;font-size:9px">Sebastian Kristoffersen, Mia Hansen, Emil Larsen<br>Gruppe ADK 61</div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:8px"><div style="display:flex;flex-direction:column;gap:6px"><div style="text-align:center;font-weight:600;font-size:8px">Sammendrag</div><div style="text-align:justify;font-size:7px;padding:0 8px">Rapporten beskriver design og bygging av en gamepad-emulator med 20 stk. 2-inngangs NAND-porter fordelt på fem 74HC00N.</div><div style="font-size:10px;font-weight:600">1 Innledning</div><div style="font-size:8.5px;font-weight:600">1.2 Utstyrsliste</div><div style="text-align:justify">Utstyret som ble benyttet er gitt i Tabell 1.</div></div><div style="display:flex;flex-direction:column;gap:4px"><div style="text-align:center">Tabell 1: Utstyrsliste</div><div style="border-top:1px solid #111;border-bottom:1px solid #111;display:grid;grid-template-columns:1fr 1fr 1fr;gap:2px;padding:3px 0"><span>Utstyr</span><span>Type</span><span>Fabrikat</span><span>IC</span><span>74HC00N</span><span>TI</span><span>Multimeter</span><span>Digitalt</span><span>FLUKE</span><span>Motstand</span><span>10 kΩ</span><span>–</span></div></div></div>
+</div></div>
+</div>
+</div>
+</div>
+
+<!-- 1g Projects -->
+<div id="1g" style="display:flex;flex-direction:column;gap:16px">
+<div style="display:flex;align-items:center;gap:12px"><div style="background:#1f1e1c;color:#fff;font-weight:600;font-size:15px;padding:4px 10px;border-radius:6px">1g</div><div style="font-size:18px;font-weight:500">Prosjektoversikt med gruppemapper og maler</div></div>
+<div style="width:1440px;height:900px;border-radius:12px;overflow:hidden;background:#fbfaf8;box-shadow:0 30px 80px rgba(0,0,0,.18),0 0 0 1px rgba(0,0,0,.12);display:flex">
+<div style="width:236px;flex:none;background:#f3f1ed;border-right:1px solid #e2dfd9;padding:16px 10px;display:flex;flex-direction:column;gap:22px;font-size:13px">
+<div style="display:flex;gap:8px;padding:0 6px"><div style="width:12px;height:12px;border-radius:50%;background:#ff5f57"></div><div style="width:12px;height:12px;border-radius:50%;background:#febc2e"></div><div style="width:12px;height:12px;border-radius:50%;background:#28c840"></div></div>
+<div style="display:flex;flex-direction:column;gap:2px"><div style="padding:5px 8px;color:#4a4742">Nylige</div><div style="padding:5px 8px;color:#4a4742">Delt med meg</div><div style="padding:5px 8px;color:#4a4742">Maler</div></div>
+<div style="display:flex;flex-direction:column;gap:2px"><div style="font-size:11px;font-weight:600;color:#8d8982;padding:0 8px 6px;letter-spacing:.04em">GRUPPER</div><div style="padding:5px 8px;border-radius:6px;background:#e4e0d9;font-weight:600">ADK 61 · ELI1300</div><div style="padding:5px 8px;color:#4a4742">Lab-par · ELPE1300</div><div style="padding:5px 8px;color:#4a4742">Privat</div></div>
+<div style="margin-top:auto;padding:10px 8px;font-size:12px;color:#6b6862;display:flex;align-items:center;gap:8px"><div style="width:7px;height:7px;border-radius:50%;background:#4d8a5a"></div>Synkronisert med kobling.app</div>
+</div>
+<div style="flex:1;min-width:0;padding:32px 40px;display:flex;flex-direction:column;gap:28px">
+<div style="display:flex;align-items:center;gap:12px"><div style="font-size:26px;font-weight:600;letter-spacing:-.01em">ADK 61 · ELI1300</div><div style="display:flex;margin-left:8px"><div style="width:24px;height:24px;border-radius:50%;background:oklch(0.62 0.13 30);border:2px solid #fbfaf8"></div><div style="width:24px;height:24px;border-radius:50%;background:oklch(0.62 0.13 150);border:2px solid #fbfaf8;margin-left:-8px"></div><div style="width:24px;height:24px;border-radius:50%;background:oklch(0.62 0.13 300);border:2px solid #fbfaf8;margin-left:-8px"></div></div><div style="flex:1"></div><div style="padding:7px 14px;border-radius:7px;background:oklch(0.52 0.15 250);color:#fff;font-size:13px;font-weight:600">Ny oblig</div></div>
+<div style="display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:20px">
+<sc-for list="{{ projects }}" as="p" hint-placeholder-count="5">
+<div style="display:flex;flex-direction:column;gap:10px">
+<div style="aspect-ratio:210/297;background:#fff;border:1px solid #e2dfd9;border-radius:6px;box-shadow:0 2px 8px rgba(0,0,0,.05);padding:18px 14px;display:flex;flex-direction:column;gap:5px"><div style="height:5px;width:70%;background:#2a2825;align-self:center;border-radius:1px"></div><div style="height:3px;width:45%;background:#b5b0a8;align-self:center;margin-bottom:8px"></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;flex:1"><div style="background-image:repeating-linear-gradient(#e7e4de 0 2px,transparent 2px 6px)"></div><div style="background-image:repeating-linear-gradient(#e7e4de 0 2px,transparent 2px 6px)"></div></div></div>
+<div><div style="font-size:14px;font-weight:600">{{ p.title }}</div><div style="font-size:12px;color:#8d8982;margin-top:2px">{{ p.meta }}</div></div>
+</div>
+</sc-for>
+</div>
+<div style="display:flex;flex-direction:column;gap:12px"><div style="font-size:15px;font-weight:600">Start fra mal</div>
+<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px">
+<div style="border:2px solid oklch(0.55 0.15 250);border-radius:10px;padding:14px;background:#fff;display:flex;flex-direction:column;gap:4px"><div style="font-weight:600;font-size:14px">Rapportmal ELI1300</div><div style="font-size:12px;color:#6b6862">Jetlund 2025 · tospalte, 11pt, siunitx, circuitikz</div></div>
+<div style="border:1px solid #e2dfd9;border-radius:10px;padding:14px;background:#fff;display:flex;flex-direction:column;gap:4px"><div style="font-weight:600;font-size:14px">Labjournal</div><div style="font-size:12px;color:#6b6862">Enspalte, måletabeller og plott</div></div>
+<div style="border:1px dashed #d6d2cb;border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:4px"><div style="font-weight:600;font-size:14px">Importer .tex-mal</div><div style="font-size:12px;color:#6b6862">Fra fil eller Overleaf-zip</div></div>
+</div></div>
+</div>
+</div>
+</div>
+
+<!-- 1h Settings -->
+<div id="1h" style="display:flex;flex-direction:column;gap:16px">
+<div style="display:flex;align-items:center;gap:12px"><div style="background:#1f1e1c;color:#fff;font-weight:600;font-size:15px;padding:4px 10px;border-radius:6px">1h</div><div style="font-size:18px;font-weight:500">Mal-oppsett: valgene skriver preamble automatisk</div></div>
+<div style="width:1100px;height:720px;border-radius:12px;overflow:hidden;background:#fbfaf8;box-shadow:0 30px 80px rgba(0,0,0,.18),0 0 0 1px rgba(0,0,0,.12);display:flex;flex-direction:column">
+<div style="height:52px;flex:none;display:flex;align-items:center;gap:16px;padding:0 16px;background:#f3f1ed;border-bottom:1px solid #e2dfd9"><div style="display:flex;gap:8px"><div style="width:12px;height:12px;border-radius:50%;background:#ff5f57"></div><div style="width:12px;height:12px;border-radius:50%;background:#febc2e"></div><div style="width:12px;height:12px;border-radius:50%;background:#28c840"></div></div><div style="flex:1;display:flex;justify-content:center;gap:4px;font-size:12px;color:#4a4742"><div style="padding:5px 12px">Generelt</div><div style="padding:5px 12px;border-radius:6px;background:#fff;border:1px solid #e2dfd9;font-weight:600">Mal-oppsett</div><div style="padding:5px 12px">Kompilering</div><div style="padding:5px 12px">Server og konto</div></div><div style="width:52px"></div></div>
+<div style="flex:1;display:flex;min-height:0">
+<div style="flex:1;padding:28px 36px;display:flex;flex-direction:column;gap:22px;font-size:14px">
+<div style="display:flex;flex-direction:column;gap:10px"><div style="font-size:11px;font-weight:600;color:#8d8982;letter-spacing:.04em">DOKUMENT</div>
+<div style="display:flex;justify-content:space-between;align-items:center"><span>Dokumentklasse</span><div style="padding:5px 10px;border:1px solid #e2dfd9;border-radius:6px;background:#fff">article ▾</div></div>
+<div style="display:flex;justify-content:space-between;align-items:center"><span>Skriftstørrelse</span><div style="display:flex;background:#ece9e3;border-radius:7px;padding:2px;font-size:12px"><div style="padding:4px 10px">10pt</div><div style="padding:4px 10px;border-radius:5px;background:#fff">11pt</div><div style="padding:4px 10px">12pt</div></div></div>
+<div style="display:flex;justify-content:space-between;align-items:center"><span>Spalter</span><div style="display:flex;background:#ece9e3;border-radius:7px;padding:2px;font-size:12px"><div style="padding:4px 10px">Én</div><div style="padding:4px 10px;border-radius:5px;background:#fff">To</div></div></div>
+<div style="display:flex;justify-content:space-between;align-items:center"><span>Marger (topp/bunn · sider)</span><span style="color:#4a4742">2 cm · 3 cm</span></div>
+<div style="display:flex;justify-content:space-between;align-items:center"><span>Innrykk i avsnitt</span><div style="width:36px;height:20px;border-radius:10px;background:#d6d2cb;position:relative"><div style="position:absolute;left:2px;top:2px;width:16px;height:16px;border-radius:50%;background:#fff"></div></div></div></div>
+<div style="display:flex;flex-direction:column;gap:10px"><div style="font-size:11px;font-weight:600;color:#8d8982;letter-spacing:.04em">TALL OG ENHETER (SIUNITX)</div>
+<div style="display:flex;justify-content:space-between;align-items:center"><span>Desimaltegn</span><div style="display:flex;background:#ece9e3;border-radius:7px;padding:2px;font-size:12px"><div style="padding:4px 12px;border-radius:5px;background:#fff">2,3</div><div style="padding:4px 12px">2.3</div></div></div>
+<div style="display:flex;justify-content:space-between;align-items:center"><span>Imaginær enhet</span><div style="display:flex;background:#ece9e3;border-radius:7px;padding:2px;font-size:12px;font-family:'STIX Two Text',serif;font-style:italic"><div style="padding:4px 12px;border-radius:5px;background:#fff">j</div><div style="padding:4px 12px">i</div></div></div>
+<div style="display:flex;justify-content:space-between;align-items:center"><span>Advar mot <i style="font-family:'STIX Two Text',serif">U</i> for spenning og 1V uten \qty</span><div style="width:36px;height:20px;border-radius:10px;background:oklch(0.55 0.15 250);position:relative"><div style="position:absolute;right:2px;top:2px;width:16px;height:16px;border-radius:50%;background:#fff"></div></div></div></div>
+<div style="display:flex;flex-direction:column;gap:10px"><div style="font-size:11px;font-weight:600;color:#8d8982;letter-spacing:.04em">KRETSER</div>
+<div style="display:flex;justify-content:space-between;align-items:center"><span>Standard symbolstil</span><div style="display:flex;background:#ece9e3;border-radius:7px;padding:2px;font-size:12px"><div style="padding:4px 10px">Amerikansk</div><div style="padding:4px 10px;border-radius:5px;background:#fff">Europeisk</div></div></div>
+<div style="display:flex;justify-content:space-between;align-items:center"><span>Maks sider (sjekk)</span><span style="color:#4a4742">5</span></div></div>
+</div>
+<div style="width:440px;flex:none;border-left:1px solid #e2dfd9;background:#f6f4f0;display:flex;flex-direction:column">
+<div style="padding:12px 16px;font-size:12px;color:#6b6862;border-bottom:1px solid #e9e6e0;display:flex;justify-content:space-between"><span style="font-weight:600;color:#3d3a36">Generert preamble</span><span>Skrivebeskyttet</span></div>
+<div style="padding:12px 16px;font-family:'JetBrains Mono',monospace;font-size:12px;line-height:1.75;color:#3d3a36">
+<div><span style="color:oklch(0.5 0.15 300)">\documentclass</span>[<span style="background:oklch(0.92 0.05 250)">11pt</span>,a4paper,<span style="background:oklch(0.92 0.05 250)">twocolumn</span>]{article}</div>
+<div><span style="color:oklch(0.5 0.15 300)">\usepackage</span>[norsk]{babel}</div>
+<div><span style="color:oklch(0.5 0.15 300)">\usepackage</span>[a4paper,top=2cm,bottom=2cm,</div><div>  left=3cm,right=3cm]{geometry}</div>
+<div><span style="color:oklch(0.5 0.15 300)">\usepackage</span>{amsmath}</div>
+<div><span style="color:oklch(0.5 0.15 300)">\usepackage</span>[norsk]{cleveref}</div>
+<div><span style="color:oklch(0.5 0.15 300)">\usepackage</span>{siunitx}</div>
+<div><span style="color:oklch(0.5 0.15 300)">\sisetup</span>{</div>
+<div>  output-complex-root=\ensuremath{\mathit{<span style="background:oklch(0.92 0.05 250)">j</span>}},</div>
+<div>  output-decimal-marker={<span style="background:oklch(0.92 0.05 250)">,</span>}}</div>
+<div><span style="color:oklch(0.5 0.15 300)">\usepackage</span>{tikz}</div>
+<div><span style="color:oklch(0.5 0.15 300)">\usepackage</span>[<span style="background:oklch(0.92 0.05 250)">european</span>]{circuitikz}</div>
+<div><span style="color:oklch(0.5 0.15 300)">\usepackage</span>{pgfplots}</div>
+<div><span style="color:oklch(0.5 0.15 300)">\setlength</span>{\parindent}{0pt}</div>
+</div></div>
+</div>
+</div>
+</div>
+
+</div>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      prefixes: [{s:'p',n:'piko'},{s:'n',n:'nano'},{s:'µ',n:'mikro'},{s:'m',n:'milli'},{s:'k',n:'kilo'},{s:'M',n:'mega'},{s:'G',n:'giga'}],
+      units: [{s:'Ω',n:'\\ohm'},{s:'V',n:'\\volt'},{s:'A',n:'\\ampere'},{s:'W',n:'\\watt'},{s:'F',n:'\\farad'},{s:'H',n:'\\henry'},{s:'Hz',n:'\\hertz'},{s:'s',n:'\\second'},{s:'S',n:'\\siemens'},{s:'dB',n:'\\decibel'},{s:'°',n:'\\degree'},{s:'C',n:'\\coulomb'},{s:'J',n:'\\joule'},{s:'K',n:'\\kelvin'}],
+      symbols: [{s:'v',n:'v_s'},{s:'i',n:'i_D'},{s:'R',n:'R_1'},{s:'C',n:'C_1'},{s:'ℓ',n:'\\ell'},{s:'ω',n:'\\omega'},{s:'τ',n:'\\tau'}],
+      projects: [{title:'Oblig 4 – Gamepad-emulator',meta:'Redigert nå · 3 av 5 sider'},{title:'Oblig 3 – Logiske porter',meta:'Levert 12. okt'},{title:'Oblig 2 – Spenningsdeler',meta:'Levert 28. sep'},{title:'Oblig 1 – Diodekretser',meta:'Levert 14. sep'},{title:'Lab 2 – Transistor',meta:'Utkast · Emil'}]
+    };
+  }
+}
+</script>
+</body>
+</html>

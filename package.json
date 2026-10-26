@@ -1,0 +1,16 @@
+{
+  "name": "kobling",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.28.0",
+  "scripts": {
+    "extract": "node tools/extract-prototype.mjs",
+    "dev": "pnpm --filter @kobling/web dev",
+    "dev:server": "pnpm --filter @kobling/server dev",
+    "build": "pnpm -r build",
+    "test": "pnpm -r test"
+  },
+  "devDependencies": {
+    "acorn": "^8.19.0"
+  }
+}

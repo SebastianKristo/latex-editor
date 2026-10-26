@@ -1,0 +1,33 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Kobling",
+  "version": "0.1.0",
+  "identifier": "no.kristo.kobling",
+  "build": {
+    "beforeDevCommand": "pnpm --filter @kobling/web dev",
+    "devUrl": "http://localhost:5173",
+    "beforeBuildCommand": "pnpm --filter @kobling/web build",
+    "frontendDist": "../../web/dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Kobling",
+        "width": 1440,
+        "height": 900,
+        "minWidth": 1180,
+        "minHeight": 640,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
+        "decorations": true
+      }
+    ],
+    "security": { "csp": null }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["dmg", "msi"],
+    "category": "Productivity",
+    "shortDescription": "LaTeX-editor for elektrorapporter"
+  }
+}

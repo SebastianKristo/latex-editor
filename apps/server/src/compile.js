@@ -32,6 +32,7 @@ export async function compileTex({ tex, files = {}, engine = 'pdfLaTeX', timeout
 
 // Norsk forklaring til vanlige TeX-meldinger (vises under den engelske meldingen i loggen).
 const EXPLAIN = [
+  [/Option clash for package/, 'Pakken lastes flere ganger med ulike valg. Slå valgene sammen i én \\usepackage-linje.'],
   [/Undefined control sequence/, 'Ukjent kommando. Sjekk stavemåten, eller om pakken som definerer den er lastet.'],
   [/Missing \$ inserted/, 'Matte-tegn (_ ^ \\alpha …) brukt utenfor matte-modus. Sett uttrykket i $ … $.'],
   [/File `([^']+)' not found/, 'Filen mangler. Last opp bildet med akkurat dette navnet, eller rett filnavnet.'],
@@ -50,7 +51,8 @@ export const explain = msg => (EXPLAIN.find(([re]) => re.test(msg)) || [, ''])[1
 export function texErrors(log) {
   const out = [], lines = log.split('\n');
   lines.forEach((l, i) => {
-    if (!l.startsWith('! ')) return;
+    // «==> Fatal error occurred» er bare følgen av feilen over, ikke en egen feil
+    if (!l.startsWith('! ') || (/^!\s*==> Fatal error/.test(l) && out.length)) return;
     const ln = lines.slice(i, i + 8).join('\n').match(/l\.(\d+)/);
     const message = l.slice(2).replace(/^LaTeX Error: /, '');
     out.push({ message, line: ln ? Number(ln[1]) : null, hint: explain(message) });

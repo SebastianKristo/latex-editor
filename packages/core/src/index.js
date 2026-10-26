@@ -435,11 +435,49 @@ function preamble(S) {
     ...(S.indent ? [] : ['\\setlength{\\parindent}{0pt}'])
   ];
 }
+// Egne preambel-linjer går foran de genererte når de laster samme pakke, ellers blir
+// pakken lastet to ganger («Option clash for package geometry»).
+const USEPKG = /^\s*\\usepackage(?:\[([^\]]*)\])?\{([^}]*)\}\s*(%.*)?$/;
+const pkgsOf = s => {
+  const m = s.match(USEPKG);
+  return m ? { opts: (m[1] || '').trim(), names: m[2].split(',').map(x => x.trim()).filter(Boolean) } : null;
+};
+function ownPreamble(gen, pre) {
+  const out = gen.slice(),
+    rest = [],
+    at = name => out.findIndex(s => (pkgsOf(s)?.names || []).includes(name)),
+    drop = name => {
+      const k = at(name);
+      if (k >= 0) out.splice(k, 1);
+    };
+  pre.forEach(s => {
+    const p = pkgsOf(s),
+      dup = p ? p.names.filter(n => at(n) >= 0) : [];
+    if (!dup.length) return rest.push(s);
+    if (!p.opts) {
+      // samme pakke uten valg: den genererte linja dekker den allerede
+      const left = p.names.filter(n => at(n) < 0);
+      if (left.length) rest.push('\\usepackage{' + left.join(',') + '}');
+    } else if (p.names.length === 1) out[at(p.names[0])] = s;
+    else {
+      dup.forEach(drop);
+      rest.push(s);
+    }
+  });
+  // cleveref må lastes etter hyperref
+  if (rest.some(s => (pkgsOf(s)?.names || []).includes('hyperref'))) {
+    const k = at('cleveref');
+    if (k >= 0) {
+      const [c] = out.splice(k, 1);
+      return [...out, ...rest, c];
+    }
+  }
+  return [...out, ...rest];
+}
 function docCode(doc, S) {
   const L = [],
     P = (s, bid) => L.push({ s, bid: bid || null });
-  preamble(S).forEach(s => P(s));
-  (doc.pre || []).forEach(s => P(s));
+  ownPreamble(preamble(S), doc.pre || []).forEach(s => P(s));
   P('');
   P(`\\title{${esc(doc.title)}}`);
   P(`\\author{${esc(doc.authors)}\\\\${esc(doc.group)}}`);
@@ -1942,8 +1980,23 @@ function lintTex(src, files) {
     inTikz = () => envs.some(e => /^(tikzpicture|circuitikz|axis|scope)$/.test(e.env));
   const pk = new Set(),
     defs = new Set();
-  src.replace(/\\usepackage(?:\[[^\]]*\])?\{([^}]*)\}/g, (m, a) => {
-    a.split(',').forEach(x => pk.add(x.trim()));
+  const pkOpts = {};
+  src.replace(/\\usepackage(?:\[([^\]]*)\])?\{([^}]*)\}/g, (m, o, a, at) => {
+    const opts = (o || '').split(',').map(x => x.trim()).filter(Boolean);
+    a.split(',').forEach(x => {
+      x = x.trim();
+      pk.add(x);
+      const first = pkOpts[x];
+      if (!first) pkOpts[x] = opts;
+      // LaTeX godtar en ny lasting bare hvis valgene allerede er med i den første
+      else if (opts.some(v => !first.includes(v)))
+        add(
+          src.slice(0, at).split('\n').length,
+          'error',
+          'LaTeX Error: Option clash for package ' + x + '.',
+          'Pakken «' + x + '» lastes flere ganger med ulike valg. Slå valgene sammen i én \\usepackage-linje.'
+        );
+    });
     return m;
   });
   src.replace(/\\newenvironment\{([^}]*)\}/g, (m, a) => {

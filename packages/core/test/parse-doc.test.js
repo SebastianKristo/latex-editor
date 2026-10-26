@@ -44,3 +44,32 @@ describe('lintTex', () => {
     expect(msgs.some(m => /multicol/.test(m))).toBe(true);
   });
 });
+
+describe('egen preamble mot generert', () => {
+  const pre = ['\\usepackage[margin=2.5cm]{geometry}', '\\usepackage[hyphens]{url}', '\\usepackage{hyperref}', '\\usepackage{amsmath}'];
+  const d = { ...makeDocs()[0], pre };
+  const tex = code(d);
+  const loads = n => tex.split('\n').filter(l => new RegExp('\\\\usepackage(\\[[^\\]]*\\])?\\{' + n + '\\}').test(l));
+
+  it('egen \\usepackage{geometry} erstatter den genererte (ingen option clash)', () => {
+    expect(loads('geometry')).toEqual(['\\usepackage[margin=2.5cm]{geometry}']);
+    expect(loads('amsmath')).toHaveLength(1);
+    expect(lintTex(tex).filter(x => /Option clash/.test(x.msg))).toEqual([]);
+  });
+
+  it('cleveref lastes etter hyperref', () => {
+    const ls = tex.split('\n');
+    expect(ls.findIndex(l => /\{cleveref\}/.test(l))).toBeGreaterThan(ls.findIndex(l => /\{hyperref\}/.test(l)));
+  });
+
+  it('koden kan leses inn igjen uten at linjene dobles', () => {
+    const r = parseDoc(tex, d, S);
+    expect(code({ ...d, ...r }, { ...S, ...r.settings })).toBe(tex);
+  });
+
+  it('lintTex finner samme pakke lastet med ulike valg', () => {
+    const t = '\\documentclass{article}\n\\usepackage[a4paper]{geometry}\n\\usepackage[margin=1cm]{geometry}\n\\begin{document}\nx\n\\end{document}';
+    const e = lintTex(t).filter(x => /Option clash/.test(x.msg));
+    expect(e.map(x => x.line)).toEqual([3]);
+  });
+});

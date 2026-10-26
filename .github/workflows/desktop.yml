@@ -1,0 +1,33 @@
+name: Desktop
+# Bygger Kobling for macOS (.dmg, universal) og Windows (.msi). Kjøres manuelt eller ved en versjonstagg.
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            args: --target universal-apple-darwin --bundles dmg
+          - os: windows-latest
+            args: --bundles msi
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.os == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @kobling/desktop exec tauri build ${{ matrix.args }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kobling-${{ matrix.os }}
+          path: |
+            apps/desktop/src-tauri/target/**/bundle/dmg/*.dmg
+            apps/desktop/src-tauri/target/**/bundle/msi/*.msi

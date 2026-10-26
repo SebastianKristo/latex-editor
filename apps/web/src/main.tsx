@@ -2,6 +2,7 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
+import './theme.css';
 import { skeleton } from '@kobling/core';
 import templateSrc from './template.html?raw';
 import { setTemplate } from './dc-runtime';
@@ -22,16 +23,16 @@ const startView = params.get('view') || 'editor';
 // Demo uten server: bare i utvikling eller med ?demo=1 (som prototypen).
 const renderDemo = () => root.render(React.createElement(App as any, { platform, startView, simulateCollab: true }));
 const renderLogin = (mode: LoginMode, error?: string) =>
-  root.render(React.createElement(Login, { mode, error, platform, onDone: (user: any) => start(user) }));
+  root.render(React.createElement(Login, { mode, error, platform, onDone: async (user: any) => start(user, (await api('GET', '/api/me').catch(() => ({}))).access) }));
 
-async function start(user: any) {
+async function start(user: any, access?: any) {
   try {
     let docs = await api('GET', '/api/docs');
     if (!docs.length) {
       await api('POST', '/api/docs', { doc: { title: 'Rapportmal ELI1300', authors: user.name, group: '', folder: 'Privat', meta: 'Opprettet nå', blocks: skeleton('rapport') } });
       docs = await api('GET', '/api/docs');
     }
-    const server = new ServerSession({ user, docs });
+    const server = new ServerSession({ user, docs, access });
     root.render(React.createElement(App as any, { key: user.id, platform, startView, simulateCollab: false, server }));
   } catch (e: any) {
     renderLogin('login', e.message);
@@ -51,8 +52,8 @@ async function boot() {
     if ((await api('GET', '/api/setup')).needed) return renderLogin('setup');
   } catch { /* eldre server */ }
   try {
-    const { user } = await api('GET', '/api/me');
-    return start(user);
+    const { user, access } = await api('GET', '/api/me');
+    return start(user, access);
   } catch {
     return renderLogin('login');
   }

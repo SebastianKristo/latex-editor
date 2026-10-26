@@ -2,7 +2,7 @@
 
 LaTeX-editor for tekniske rapporter i elektrofag (ELI1300-malen): visuell blokkeditor med ekte PDF ved siden av, kretsskjema-editor som skriver CircuiTikZ, enhetsvelger for `\qty{}{}`, sanntidssamarbeid, kommentarer, versjonshistorikk, deling på e-post og en selvhostet server med DuckDNS, HTTPS og backup til SMB.
 
-Designgrunnlaget ligger i `design_handoff_kobling/` (prototype, mal og deploy-filer).
+Designgrunnlaget ligger i `design_handoff_kobling/`. Fasiten er `prototype/Kobling App v2.dc.html` (design 1a), og der ligger også malen og deploy-filene.
 
 ## Struktur
 
@@ -10,7 +10,7 @@ Designgrunnlaget ligger i `design_handoff_kobling/` (prototype, mal og deploy-fi
 |---|---|
 | `packages/core` | Ren logikk: LaTeX-generering (`docCode`, `preamble`), CircuiTikZ (`circLines`, `parseCircuit`, `autoLayout`), LaTeX→blokk (`parseBlock`, `parseInline`), nummerering, paginering, og dokumentmodellen i Yjs (`ydoc.js`). |
 | `packages/ui` | Kretssymboler som SVG (`symEls`, `drawCircuit`). |
-| `apps/web` | Klienten (React 18 + Vite). UI-et kjøres fra prototypens mal (`src/template.html`) via `src/dc-runtime.tsx`, så utseende og tekster er de samme som i prototypen. `src/server-mode.js` kobler appen til serveren, `src/ysocket.ts` er Yjs-tilkoblingen, `src/PdfView.tsx` viser PDF med pdf.js, og `src/Login.tsx` er innlogging og førstegangsoppsett. |
+| `apps/web` | Klienten (React 18 + Vite). UI-et kjøres fra v2-prototypens mal (`src/template.html`) via `src/dc-runtime.tsx`, så utseende og tekster er de samme som i prototypen. Tema for lys og mørk modus ligger i `src/theme.css`. `src/server-mode.js` kobler appen til serveren, `src/ysocket.ts` er Yjs-tilkoblingen, `src/PdfView.tsx` viser PDF med pdf.js, og `src/Login.tsx` er innlogging og førstegangsoppsett. |
 | `apps/server` | Node 22 + Fastify + SQLite (`node:sqlite`): kontoer, roller, invitasjoner, Yjs-synk, kompilering med `latexmk` og SyncTeX, SMTP, DuckDNS, Let's Encrypt og SMB-backup. |
 | `apps/desktop` | Tauri 2-skall (macOS .dmg, Windows .msi, Linux .deb) rundt `apps/web`. |
 | `deploy/` | `generators.js` og ferdige filer for Proxmox, Unraid og Docker Compose, pluss Proxmox-helper-skriptet `proxmox/kobling.sh` (se `deploy/README.md`). |
@@ -31,6 +31,15 @@ Første gang serveren startes uten brukere viser klienten «Opprett administrato
 ## Hvordan det henger sammen
 
 - **Dokumenter** er Yjs-dokumenter (ett per rapport). Blokker, metadata, kommentarer og historikk ligger i dokumentet. Samtidige endringer i ulike blokker flettes; i samme blokk vinner siste endring. Serveren lagrer tilstanden i SQLite og håndhever roller: lesere får ikke gjennom endringer, og kommentatorer kan bare endre kommentarer.
+- **v2-funksjoner:**
+  - Redigerbar kode med syntaksfarger, «Synkronisert»-status og feilstripe.
+  - LaTeX-blokker med forhåndsvisning.
+  - Feilsjekk mens du skriver (`lintTex`) og Logg-fanen med hurtigrettinger.
+  - Bilder i fillisten.
+  - Profilmeny og mørk modus («Som systemet» som standard).
+  - Admin-bryter for versjonshistorikk.
+- **Kompileringsloggen** samler feilsjekken i klienten og den ekte `latexmk`-loggen fra serveren (feil og advarsler med linjenummer og norsk forklaring). Feil fra feilsjekken stopper kompileringen, som i prototypen.
+- **Versjonshistorikken** ligger i et eget Yjs-rom per dokument. Når admin slår av «Vis versjonshistorikk», nekter serveren vanlige brukere tilgang til rommet og kobler fra dem som er inne.
 - **LaTeX-koden kan redigeres direkte** i «Kode» og «Delt». Endringer leses tilbake til blokker, og egne `\usepackage`-linjer tas vare på. LaTeX som ikke passer en kjent blokktype (for eksempel `align` eller egne makroer), blir en «LaTeX»-blokk som skrives ut uendret. Innlimt LaTeX i den visuelle editoren blir også til blokker, og «{ } LaTeX» setter inn en tom LaTeX-blokk.
 - **Live-markører** går via Yjs awareness: hvem som står i hvilken blokk.
 - **PDF**: klienten sender generert LaTeX til `/api/compile`, og serveren kjører `latexmk` og svarer med PDF. Klikk i PDF-en slår opp linjen med SyncTeX og hopper til blokken. Aktiv blokk markeres i PDF-en.
@@ -57,8 +66,14 @@ Imaget bygger på Debian 13 (trixie, TeX Live 2024). Grunnimaget kan overstyres 
 
 ## Verifisert
 
-- **Kjernen:** 89 tester. Rundtur visuell → LaTeX → visuell for alle blokker i eksemplene. Diodekretsen fra `main.tex` importeres og eksporteres uten tap. Yjs-modellen fletter samtidige endringer.
-- **Serveren:** 12 tester. Ikke-admin får 403 på alle admin-API-er. Invitasjoner og roller fungerer. Lesere og kommentatorer begrenses i Yjs. Varsel om nye kommentarer går på e-post. Utlogging, HTTPS-servering og DuckDNS-TXT er dekket.
+- **v2 i nettleseren mot ekte server:**
+  - Feil i koden stopper kompileringen, og hurtigrettingen «Legg til }» kompilerer på nytt.
+  - `latexmk`-feil («Undefined control sequence») vises med norsk forklaring.
+  - Et bilde lastet opp i fillisten kan brukes med `\includegraphics{bilder/…}` og kompilerer.
+  - Mørk modus beholder hvite PDF-sider.
+  - Vanlige brukere mister Historikk når admin slår den av, både i appen og i API-et.
+- **Kjernen:** 98 tester. Rundtur visuell → LaTeX → visuell for alle blokker i eksemplene. Diodekretsen fra `main.tex` importeres og eksporteres uten tap. Yjs-modellen fletter samtidige endringer.
+- **Serveren:** 15 tester. Ikke-admin får 403 på alle admin-API-er. Invitasjoner og roller fungerer. Lesere og kommentatorer begrenses i Yjs. Varsel om nye kommentarer går på e-post. Utlogging, HTTPS-servering og DuckDNS-TXT er dekket.
 - **LaTeX:** alle 5 eksempeldokumentene kompilerer med `latexmk` uten feil, med én og med to spalter (lokalt med TeX Live 2023, og i Docker-imaget).
 - **I nettleseren (Playwright mot ekte server):**
   - Førstegangsoppsett og innlogging.

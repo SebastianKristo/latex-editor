@@ -1,6 +1,6 @@
 # Handoff: Kobling – LaTeX-editor for elektrorapporter
 
-> **Til Claude Code:** Les hele denne fila før du starter. Åpne `prototype/Kobling App.dc.html` i en nettleser og klikk gjennom alt. Prototypen er fasiten for utseende og oppførsel. Bygg det som et ekte produkt (klient + server) som oppfører seg nøyaktig likt.
+> **Til Claude Code:** Les hele denne fila før du starter. **Fasit for utseende er `prototype/Kobling App v2.dc.html`** (design 1a, se «Visuell versjon 2» nederst). Funksjonene er de samme som i `Kobling App.dc.html`. Åpne v2 i en nettleser og klikk gjennom alt. Prototypen er fasiten for utseende og oppførsel. Bygg det som et ekte produkt (klient + server) som oppfører seg nøyaktig likt.
 
 ## Overview
 Kobling er en editor for tekniske rapporter i LaTeX for elektrostudenter (ELI1300, NTNU-mal i `reference/main.tex`). Den har:
@@ -130,11 +130,91 @@ Preamble skal være som `preamble()` i prototypen (basert på `reference/main.te
 Ingen bilder eller ikoner utover tekstglyfer (§ ¶ Ω α ∑ ⏚ ▣ ▦ ↗ ⋮⋮ ⚙). Kretssymboler tegnes som SVG-stier (se `symEls`). Fonter fra Google Fonts. KaTeX 0.16.
 
 ## Files
-- `prototype/Kobling App.dc.html` – hovedprototypen (all UI + logikk). Åpnes direkte i nettleser.
+- `prototype/Kobling App v2.dc.html` – **gjeldende prototype** (design 1a + alle funksjoner). Åpnes direkte i nettleser (trenger `support.js` i samme mappe).
+- `prototype/Kobling App.dc.html` – forrige visuelle versjon (samme funksjoner, varm palett). Kun referanse.
+- `prototype/Kobling Redesign.dc.html` – de tre retningene 1a/1b/1c. Valgt: **1a**, men med «SETT INN»-baren fra eksisterende editor (ikke den flytende pillen).
 - `prototype/Kobling.dc.html` – tidlig utforskning (to visuelle retninger, kun referanse).
 - `deploy/generators.js` – generator for install.sh, Unraid-XML, compose og .env (bruk som den er).
 - `deploy/proxmox/install.sh`, `deploy/unraid/my-kobling-server.xml`, `deploy/docker-compose.yml`, `deploy/.env.example`, `deploy/README.md`.
 - `reference/main.tex` – skolens LaTeX-mal. `reference/kretsskjema-eksempel.png` – eksempel på krets studentene må tegne.
 
 ## Forslag til første melding i Claude Code
-> Les `design_handoff_kobling/README.md` og åpne `prototype/Kobling App.dc.html`. Sett opp monorepoet i «Anbefalt stakk». Start med `packages/core` (flytt `docCode`, `circLines`, `parseCircuit`, `autoLayout`, `parseBlock` til TypeScript med tester), deretter `apps/web` (editor + PDF), så kretseditoren, så `apps/server` (Yjs, kompilering, invitasjoner, SMTP), og til slutt Tauri-appene og Docker-imaget. Følg prototypen pikselnært og bruk tekstene ordrett.
+> Les `design_handoff_kobling/README.md` og åpne `prototype/Kobling App v2.dc.html`. Sett opp monorepoet i «Anbefalt stakk». Start med `packages/core` (flytt `docCode`, `circLines`, `parseCircuit`, `autoLayout`, `parseBlock` til TypeScript med tester), deretter `apps/web` (editor + PDF), så kretseditoren, så `apps/server` (Yjs, kompilering, invitasjoner, SMTP), og til slutt Tauri-appene og Docker-imaget. Følg prototypen pikselnært og bruk tekstene ordrett.
+
+
+---
+
+# Oppdateringer etter første handoff
+
+Alt under er implementert i prototypen og skal med i produktet. Kildefunksjonene i prototypen er nevnt i parentes, så de kan flyttes til `packages/core`.
+
+## 1. Redigerbar LaTeX-kode (fullt dokument)
+- Kodevisningen (Kode/Delt) er et **redigerbart tekstfelt over syntaksfarget kode**. Kopier/lim inn fungerer som vanlig. Tab = to mellomrom.
+- 600 ms etter siste tastetrykk tolkes hele `main.tex` (`parseDoc`) og synkroniseres til blokkmodellen, innstillingene og PDF-en. Status i kodelinjen: «Synkronisert» (grønn) / «Ikke synkronisert» (rød).
+- Ved tolkningsfeil: rød stripe «Linje N: … Visuell editor og PDF viser siste gyldige versjon.» og linjen markeres. Utkastet beholdes til det er gyldig.
+- `parseDoc` leser: `\documentclass[...]` (størrelse, twocolumn → spalter), `\title`, `\author{… \\ gruppe}`, `output-decimal-marker`, imaginær enhet, circuitikz-stil, `\setlength{\parindent}{0pt}`. **Ekstra preamble-linjer lagres i `doc.pre`** og skrives ut igjen etter standard-preamble.
+- Brødtekst deles i blokker: `abstract`, `equation`, `figure(*)` (circuitikz → krets, `\includegraphics` → bilde), `table`, `itemize` (→ tabell med stil «list»), `\section`, `\subsection`, avsnitt. **Alt annet** (ukjente miljøer, `multicols`, `center`, avsnitt som starter med ukjent kommando, `\[ … \]`) blir blokktypen **`raw`** med `src` ordrett. Blokk-id-er gjenbrukes per type i rekkefølge, så kretser/bilder ikke mistes.
+- Klikk på en kodelinje (uten utkast) markerer tilhørende blokk.
+
+## 2. `raw`-blokker (LaTeX-blokk)
+- Editor: merkelapp med miljønavn + «LaTeX-blokk · rediger koden direkte», forhåndsvisning, og når aktiv et mono-tekstfelt.
+- Forhåndsvisning (`texRender`): overskrifter med nummerering (1, 1.1, 1.1.1; `*` = unummerert), `\SI/\qty/\si/\num` med enhetssymboler, `\cref/\ref` → «tabell 1 / figur 2 / likning (1)» (etiketter fra `texLabels` over hele koden), likninger med nummer, `align`-familien, `\[ \]`, tabeller (booktabs/hline), `\caption`/`\captionof`, `multicols` (CSS-spalter), `center`, lister, `\includegraphics` fra `bilder/` (mangler → rød stiplet boks «Mangler bilder/…»). TikZ/CircuiTikZ vises som stiplet plassholder «… · tegnes i ferdig PDF». Brukerdefinerte makroer fra `doc.pre` (`\newcommand`) sendes til KaTeX.
+- **I produktet skal PDF-en komme fra ekte kompilering** (server). Forhåndsvisningen over brukes bare i den visuelle editoren.
+- PDF-sider: en blokk høyere enn en side får høyde `auto` (min 622 px) i stedet for å kuttes.
+
+## 3. Feilsjekk og kompileringslogg
+- `lintTex(src, files)` kjøres live på koden og ved hver kompilering. **Feil** stopper kompileringen: ubalanserte `{}`/`$`, `\begin`/`\end` som ikke matcher, miljø uten pakke (f.eks. `multicols` → `\usepackage{multicol}`), ukjent miljø, `_ ^ & #` utenfor matte/tabell (tillatt inne i `tikzpicture`/`circuitikz` og i `\newcommand`), manglende bildefil. **Advarsler:** udefinert `\cref`, dobbel `\label`. Linjenumre telles også inne i flerlinjers argumenter. Like meldinger på samme linje vises én gang.
+- Kodevisning: rødt/oransje linjenummer, svak bakgrunn og melding i kursiv bak linjen (✕ feil, ▲ advarsel). Antall vises i kodelinjen og åpner loggen.
+- Høyrepanel har fanen **«Logg n»**: overskrift («Kompileringen stoppet · n feil» / «Kompilert uten feil»), «Kompiler på nytt», og for hver melding: merke Feil/Advarsel, `main.tex:linje`, TeX-melding (engelsk), forklaring (norsk), kodelinjen. Klikk → hopper til linjen i koden.
+- **Hurtigretting:** manglende `}` i `\newcommand` → knapp «Legg til } på linje N». Manglende bilde → «Last opp bildet …» (lagres med nøyaktig filnavnet fra koden).
+- Ved feil: statuspillen blir rød «n feil · kompilering stoppet», PDF beholder forrige vellykkede versjon med rød stripe «Vis logg».
+- I produktet: kombiner `lintTex` (rask, i klienten) med **ekte latexmk-logg fra serveren** (parse `! …`, `l.NN`, `LaTeX Warning:`) i samme fane og samme format.
+
+## 4. Bilder i fillisten
+- Slipp bilder på «FILER» (stiplet ramme + blå tone ved drag) eller klikk «Slipp bilder her, eller klikk for å laste opp». Lagres i `doc.files[] {id, file, src}` → `bilder/<navn>`. Navnekollisjon → `-2`, `-3`.
+- Ubrukte bilder vises med «ikke i bruk», forhåndsvisning ved hover, kan dras inn i editoren eller klikkes (settes inn etter aktiv blokk). `\includegraphics{bilder/x}` i koden finner også disse.
+
+## 5. Topplinje, meny og profil
+- Logo alltid synlig: blå «K» 24 px (radius 6) + «Kobling», klikk → prosjekter.
+- **Fil-knapp**: 30 px høy, radius 8, dokumentikon + «Fil» + chevron (roteres 180° når åpen). Åpen: blå kant + ring `0 0 0 3px`. Meny 300 px, radius 12: Nytt dokument … ⌘N · Dupliser dokument · Last opp bilder … | EKSPORTER: PDF ⌘P · LaTeX-kildekode .tex · Bilder (n) | NYLIG ÅPNET (sideikon, aktivt dokument blå kant) | Alle prosjekter →. Ikoner: 16 px strek 1,4.
+- **Tannhjulet er fjernet.** Innstillinger ligger bak **profilikonet** (30 px rund, initialer): meny med navn/e-post, Mørk modus (På/Av), Innstillinger ⌘,, Konto, (admin) Server og backup. Lukkes med Esc/klikk utenfor.
+
+## 6. Mørk modus
+- Innstilling **Tema: Lys | Mørk | Som systemet** (Konto › Utseende, standard «Som systemet», følger `prefers-color-scheme` live) + bryter i profilmenyen.
+- Implementert med CSS-variabler på roten (`data-theme`). **Papirflater** (PDF-sider, kretslerret, kretsfigurer, hover-forhåndsvisning) holdes lyse med mørk tekst (`[data-paper]`).
+
+## 7. Admin: historikk for andre
+- Innstillinger › Server › «TILGANG FOR ANDRE BRUKERE» › **Vis versjonshistorikk** (standard på). Av → «Historikk»-fanen skjules for ikke-admin (historikken lagres fortsatt). Håndheves også i API-et.
+
+## 8. Visuell versjon 2 (design 1a) – tokens
+Layout: appbakgrunn med 10 px marg; **sidepanel, editor og høyrepanel er kort** (radius 14, skygge `0 1px 3px rgba(16,24,40,.06), 0 0 0 1px rgba(16,24,40,.03)`), 10 px mellomrom (dra-håndtaket er det 10 px brede mellomrommet). Topplinje 56 px uten bakgrunn/kant. **«SETT INN»-baren beholdes som før.**
+
+Skrift: **Geist** (UI) og **Geist Mono** (kode). PDF: STIX Two Text.
+
+Lys:
+- App `#eceef2` · kort `#fff` · hover/flate `#f3f4f7` · kodebakgrunn `#f8f9fb` · linjer `#e4e6ea`, `#eef0f3`, `#d3d7de`
+- Tekst `#16181d`, `#30343c`, `#3c414b`, `#5b616d`, `#8b919c`, `#9aa0ab`
+- Blå (primær, Del, logo) `oklch(0.55 0.17 255)`, hover `oklch(0.5 0.17 255)`
+- **Grønn** (valgt modus, valgt fil, valgt disposisjon) `#138a36` · grønn tone `#e2f3e7` · grønn tekst `#0f6e2b`
+- Syntaks: kommando `oklch(0.5 0.16 270)` kursiv · argument/miljønavn/enhet `oklch(0.56 0.14 60)` kursiv · matte `oklch(0.52 0.14 150)` · kommentar `#8b919c` · tekst `#30343c`
+
+Mørk (marineblå):
+- App `#141a22` · kort `#1b222c` · flate `#222a35`/`#232c38` · linjer `#2b3441` · tekst `#e9edf2`, `#d6dce4`, `#aab4c2`, `#8f9bab`
+- Grønn `#1f9d55`, tone `rgba(31,157,85,.18)`, tekst `#6fdc9c`
+- Syntaks: kommando `#9db4ff` · argument `#f2c36b` · matte `#7ad6a0` · kommentar `#6f7d90` · tekst `#dfe5ec`
+- Statuspiller: ok `rgba(31,157,85,.18)`, advarsel `rgba(224,163,92,.16)`
+
+Komponenter v2:
+- Modusvelger Visuell/Kode/Delt: pille på kort, padding 3, punkter 5×15, radius 999, aktiv grønn med hvit tekst.
+- Statuspille: 13/500, padding 5×12, radius 999, bakgrunn etter status (ok grønn tone, advarsel oransje tone, feil rød tone).
+- «Del»: pille, padding 7×17.
+- Disposisjon: rader 6×10, radius 8; aktiv grønn tone + grønn tekst.
+- «main.tex» i fillisten: grønn bakgrunn, hvit tekst 600, radius 8.
+- «Krav i malen»: eget felt nederst i sidepanelet (bakgrunn `#f6f7f9`, radius 10, padding 12) med fremdriftsstrek 5 px (sider / maks sider; grønn `oklch(0.62 0.14 150)`, rød over maks).
+
+## Nye akseptansekriterier
+9. Lim inn hele rapporten (med `multicols`, tikz-matriser, `\newcommand`) i kodevisningen → ingen falske feil. Bare ekte feil vises (f.eks. manglende `}`, manglende bilde, udefinert `\nb` fra ekte kompilering).
+10. Hurtigrettingene fungerer og kompilerer automatisk på nytt.
+11. Bilder dratt inn i fillisten kan refereres fra koden med `\includegraphics{bilder/…}`.
+12. Mørk/lys/system bytter uten omstart; papirflater forblir lyse.
+13. Ikke-admin ser ikke Historikk når den er slått av, og API-et nekter.

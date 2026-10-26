@@ -2,7 +2,7 @@
 // kompilering til ekte PDF (pdf.js) og SyncTeX. Prototypens lokale demo-logikk byttes ut her,
 // mens visningsmodellen (renderVals) og malen er de samme.
 import React from 'react';
-import { docCode, clone, now, slug, smtpFrom, skeleton, EMAIL_RE, DEF_DUCK, DEF_SMB, DEF_SMTP, DEF_DEP, DEF_SET } from '@kobling/core';
+import { docCode, lintTex, clone, now, slug, smtpFrom, skeleton, EMAIL_RE, DEF_DUCK, DEF_SMB, DEF_SMTP, DEF_DEP, DEF_SET } from '@kobling/core';
 import { applyDocToY, docFromY, commentsFromY, applyCommentsToY, historyFromY, pushHistory, isEmptyY } from '@kobling/core/ydoc';
 import { api, b64, setToken, serverBase } from './api';
 import { YSocket } from './ysocket';
@@ -28,8 +28,9 @@ const download = (name, blob) => {
 };
 
 export class ServerSession {
-  constructor({ user, docs }) {
+  constructor({ user, docs, access }) {
     this.user = user;
+    this.access = { histOthers: true, ...(access || {}) };
     this.docs = docs.map(toDoc);
     this.lsKey = 'kobling-user-' + user.id;
     this.persistKeys = ['settings', 'rightW', 'recent'];
@@ -57,7 +58,8 @@ export class ServerSession {
     const me = this.account();
     Object.assign(app.state, {
       docs: this.docs, cur, recent: [cur, ...recent.filter(x => x !== cur)].slice(0, 8),
-      settings: { ...DEF_SET, ...app.state.settings, ...(saved.settings || {}), server: serverBase() || location.origin },
+      // histOthers er en serverinnstilling (admin), ikke en personlig en
+      settings: { ...DEF_SET, ...app.state.settings, ...(saved.settings || {}), server: serverBase() || location.origin, histOthers: this.access.histOthers },
       rightW: saved.rightW || app.state.rightW,
       comments: [], history: [], people: [], mails: [], backups: [], presence: {}, remotePresence: [],
       me: me.id, view: app.state.view === 'settings' || app.state.view === 'projects' ? app.state.view : 'editor',
@@ -88,7 +90,7 @@ export class ServerSession {
     if (this.user.role === 'admin') this.loadAdmin();
     this.loadMails();
   }
-  unmount() { this.ys?.destroy(); clearTimeout(this.adminTimer); clearInterval(this.bkTimer); clearInterval(this.duckPoll) }
+  unmount() { this.ys?.destroy(); this.yh?.destroy(); clearTimeout(this.adminTimer); clearInterval(this.bkTimer); clearInterval(this.duckPoll) }
 
   update(ps) {
     const s = this.app.state;
@@ -99,11 +101,14 @@ export class ServerSession {
         if (d && d !== ps.docs.find(x => x.id === s.cur)) applyDocToY(this.ys.doc, d, 'app');
       }
       if (ps.comments !== s.comments) applyCommentsToY(this.ys.doc, s.comments.filter(c => c.doc === s.cur).map(({ doc, ...c }) => c), 'app');
-      if (ps.history !== s.history) {
-        const have = new Set(historyFromY(this.ys.doc).map(h => h.id));
-        s.history.filter(h => !have.has(h.id)).reverse().forEach(h => pushHistory(this.ys.doc, { ...h, snap: h.snap ? lean(h.snap) : null }, 'app'));
-      }
     }
+    if (!this.remoteHist && this.yh && this.yh.synced && ps.history !== s.history) {
+      const have = new Set(historyFromY(this.yh.doc).map(h => h.id));
+      s.history.filter(h => !have.has(h.id)).reverse().forEach(h => pushHistory(this.yh.doc, { ...h, snap: h.snap ? lean(h.snap) : null }, 'app'));
+    }
+    // Admin slår historikk for andre av/på: lagres på serveren
+    if (this.user.role === 'admin' && ps.settings.histOthers !== s.settings.histOthers)
+      api('PUT', '/api/admin/settings', { access: { histOthers: s.settings.histOthers !== false } }).catch(e => this.app.toast(e.message));
     if (ps.active !== s.active) {
       this.ys?.awareness.setLocalStateField('bid', s.active || null);
       this.syncView(s.active);
@@ -124,6 +129,7 @@ export class ServerSession {
   // ---------- Yjs ----------
   bind(docId) {
     this.ys?.destroy();
+    this.bindHistory(docId);
     const ys = new YSocket(docId);
     this.ys = ys;
     const me = this.account();
@@ -152,6 +158,22 @@ export class ServerSession {
     };
   }
 
+  // Versjonshistorikken har eget rom; serveren stenger det (4403) når den er slått av for andre.
+  bindHistory(docId) {
+    this.yh?.destroy();
+    this.yh = null;
+    if (this.user.role !== 'admin' && this.access.histOthers === false) return this.app.setState({ history: [] });
+    const yh = new YSocket(docId + '~hist');
+    this.yh = yh;
+    const pullHist = () => {
+      this.remoteHist = true;
+      this.app.setState({ history: historyFromY(yh.doc) }, () => { this.remoteHist = false });
+    };
+    yh.doc.on('update', (_u, origin) => { if (origin === yh) pullHist() });
+    yh.onSynced = pullHist;
+    yh.onStatus = (st, code) => { if (st === 'closed' && code === 4403) { this.access.histOthers = false; this.app.setState({ history: [] }) } };
+  }
+
   pull() {
     const ys = this.ys, id = this.app.state.cur;
     if (!ys) return;
@@ -160,35 +182,50 @@ export class ServerSession {
     this.app.setState(
       s => ({
         docs: s.docs.map(x => (x.id === id ? { ...x, ...d } : x)),
-        comments: commentsFromY(ys.doc).map(c => ({ ...c, doc: id })),
-        history: historyFromY(ys.doc)
+        comments: commentsFromY(ys.doc).map(c => ({ ...c, doc: id }))
       }),
       () => { this.remote = false; this.app.schedule() }
     );
   }
 
   // ---------- kompilering og PDF ----------
+  // Som i v2: rask sjekk i klienten (lintTex) først. Feil der stopper kompileringen;
+  // ellers kompilerer serveren med latexmk, og feil/advarsler derfra havner i samme logg.
   async compile() {
     const app = this.app, doc = app.curDoc(), S = app.state.settings;
     clearTimeout(app.ct);
-    const lines = docCode(doc, S), tex = lines.map(l => l.s).join('\n');
+    clearTimeout(app.ct2);
+    const gen = docCode(doc, S), genText = gen.map(l => l.s).join('\n');
+    const tex = app.codeTextNow(), src = tex.split('\n');
+    const lines = tex === genText ? gen : src.map(s => ({ s, bid: null }));
+    const withCode = d => ({ ...d, code: (src[d.line - 1] || '').trim() });
+    const lint = lintTex(tex, app.fileSet(doc)).map(withCode);
+    const count = log => ({ nE: log.filter(d => d.sev === 'error').length, nW: log.filter(d => d.sev !== 'error').length });
+    if (lint.some(d => d.sev === 'error')) return app.setState({ compile: { status: 'error', time: '', log: lint, ...count(lint) } });
     const files = {};
-    doc.blocks.filter(b => b.type === 'img' && b.src && b.src.startsWith('data:')).forEach(b => { files['bilder/' + b.file] = b.src.split(',')[1] });
+    const add = (name, url) => { if (url && url.startsWith('data:')) files['bilder/' + name] = url.split(',')[1] };
+    (doc.files || []).forEach(f => add(f.file, f.src));
+    doc.blocks.filter(b => b.type === 'img').forEach(b => add(b.file, b.src));
     const seq = ++this.seq;
     app.setState(s => ({ compile: { ...s.compile, status: 'running' } }));
+    const fromServer = (list, sev) => (list || []).map(d => withCode({ line: d.line || 0, sev, msg: d.message, hint: d.hint || '' }));
     try {
       const res = await api('POST', '/api/compile', { tex, files, engine: S.engine }, { raw: true });
       const data = new Uint8Array(await res.arrayBuffer());
       if (seq !== this.seq) return;
-      this.pdf = { data, id: res.headers.get('x-compile-id'), lines };
+      const id = res.headers.get('x-compile-id');
+      this.pdf = { data, id, lines };
       const ms = Number(res.headers.get('x-compile-ms') || 0);
-      app.setState({ compile: { status: 'ok', time: (ms / 1000).toFixed(1).replace('.', ',') }, pdfSnap: clone(doc) }, () => this.syncView(app.state.active));
+      let warn = [];
+      try { if (id) warn = fromServer((await api('GET', '/api/compile/' + id + '/log')).warnings, 'warning') } catch { /* */ }
+      const log = [...lint, ...warn.filter(w => !lint.some(l => l.line === w.line && l.msg === w.msg))];
+      app.setState({ compile: { status: 'ok', time: (ms / 1000).toFixed(1).replace('.', ','), log, ...count(log) }, pdfSnap: clone(doc) }, () => this.syncView(app.state.active));
     } catch (e) {
       if (seq !== this.seq) return;
-      const err = e.data && e.data.errors && e.data.errors[0];
-      const bid = err && err.line ? this.bidAt(lines, err.line) : null;
-      const msg = err ? (err.line ? 'linje ' + err.line + ': ' : '') + err.message : e.message;
-      app.setState({ compile: { status: 'error', time: '', msg, bid } });
+      const log = e.data && e.data.errors
+        ? [...fromServer(e.data.errors, 'error'), ...lint, ...fromServer(e.data.warnings, 'warning')]
+        : [{ line: 0, sev: 'error', msg: e.message, hint: 'Serveren kunne ikke kompilere dokumentet.', code: '' }];
+      app.setState({ compile: { status: 'error', time: '', log, ...count(log) } });
     }
   }
 
@@ -345,6 +382,7 @@ export class ServerSession {
         smb: { ...DEF_SMB, ...pick(r.smb, DEF_SMB) },
         smtp: { ...DEF_SMTP, ...pick(r.smtp, { ...DEF_SMTP, fromName: '' }) },
         deploy: { ...DEF_DEP, ...pick(r.deploy, DEF_DEP) },
+        serverUsers: r.users ? { n: r.users.n, admins: r.users.admins || 0 } : null,
         duckUi: { ...s.duckUi, log: (r.duckLog || []).map(logRow), ip: (r.duckLog || []).find(l => l.ip)?.ip || s.duckUi.ip }
       }), () => { this.adminRemote = false; this.adminLoaded = true });
     } catch { /* ikke admin */ }
@@ -497,10 +535,6 @@ export class ServerSession {
 
     if (v.backupList) v.backupList = s.backups.map(k => ({ name: k.name, meta: k.date + ' · ' + k.size, onRestore: () => this.restoreBackup(k), onDownload: () => this.downloadBackup(k) }));
 
-    if (s.compile.status === 'error') {
-      v.statusText = 'Feil på ' + s.compile.msg;
-      v.statusColor = '#b3261e';
-    }
     if (this.pdf) {
       v.pages = [];
       v.pdfView = React.createElement(PdfView, { data: this.pdf.data, zoom: v.pdfZoom, boxes: s.pdfBoxes || [], onPick: (p, x, y) => this.pick(p, x, y) });

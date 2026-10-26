@@ -1,13 +1,14 @@
-// Engangs-bootstrap: trakk logikk og mal ut av design_handoff_kobling/prototype/Kobling App.dc.html.
-// Utdataene (packages/core, packages/ui, apps/web/src/App.js, template.html) vedlikeholdes nå for hånd;
-// ikke kjør på nytt uten å sjekke diff.
+// Trekker logikk og mal ut av en prototype i design_handoff_kobling/prototype/ (standard: Kobling App v2.dc.html).
+// Utdataene (packages/core, packages/ui, apps/web/src/App.js, template.html) har egne endringer for serveren.
+// En ny prototypeversjon tas inn med treveis-merge: kjør dette for gammel og ny prototype i hver sin mappe,
+// formater med prettier, og bruk `git merge-file <fil i repo> <gammel> <ny>`.
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as acorn from 'acorn';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const src = readFileSync(join(root, 'design_handoff_kobling/prototype/Kobling App.dc.html'), 'utf8');
+const src = readFileSync(join(root, 'design_handoff_kobling/prototype', process.argv[2] || 'Kobling App v2.dc.html'), 'utf8');
 const lines = src.split('\n');
 const at = re => lines.findIndex(l => re.test(l));
 

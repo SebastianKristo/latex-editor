@@ -118,7 +118,7 @@ test('kompilering krever innlogging og gir PDF eller feil med linjenummer', asyn
   assert.equal(ok.headers['content-type'], 'application/pdf');
   const bad = await app.inject({ method: 'POST', url: '/api/compile', headers: H(userTok), payload: { tex: '\\documentclass{article}\n\\FEIL' } });
   assert.equal(bad.statusCode, 422);
-  assert.deepEqual(bad.json().errors, [{ message: 'Undefined control sequence.', line: 7 }]);
+  assert.deepEqual(bad.json().errors.map(e => [e.message, e.line, !!e.hint]), [['Undefined control sequence.', 7, true]]);
 });
 
 test('sanntid med Yjs: endringer flettes og lagres, roller håndheves', async () => {
@@ -165,6 +165,40 @@ test('kommentator kan bare kommentere; ny kommentar varsler på e-post', async (
   c.ws.close(); await wait(50);
   const log = (await app.inject({ method: 'GET', url: '/api/admin/mail-log', headers: H(adminTok) })).json();
   assert.ok(log.some(m => m.kind === 'kommentar' && m.to_addr === 'admin@test.no'));
+});
+
+test('versjonshistorikk: eget rom, kan slås av for andre enn admin (akseptanse 13)', async () => {
+  // Mia har lesetilgang fra testen over
+  const meOn = (await app.inject({ method: 'GET', url: '/api/me', headers: H(userTok) })).json();
+  assert.equal(meOn.access.histOthers, true);
+  const a = yClient(docId + '~hist', H(userTok));
+  await a.ready; await wait(30);
+  assert.equal(a.closed, null);
+  await app.inject({ method: 'PUT', url: '/api/admin/settings', headers: H(adminTok), payload: { access: { histOthers: false } } });
+  await wait(50);
+  assert.equal(a.closed, 4403, 'åpen tilkobling kastes ut');
+  assert.equal((await app.inject({ method: 'GET', url: '/api/me', headers: H(userTok) })).json().access.histOthers, false);
+  const b = yClient(docId + '~hist', H(userTok));
+  await b.ready;
+  assert.equal(b.closed, 4403);
+  const adm = yClient(docId + '~hist', H(adminTok));
+  await adm.ready; await wait(30);
+  assert.equal(adm.closed, null, 'admin ser fortsatt historikken');
+  adm.ws.close();
+  await app.inject({ method: 'PUT', url: '/api/admin/settings', headers: H(adminTok), payload: { access: { histOthers: true } } });
+});
+
+test('eksisterende historikk flyttes til historikkrommet', async () => {
+  const id = (await app.inject({ method: 'POST', url: '/api/docs', headers: H(adminTok), payload: { doc: { title: 'Gammel', blocks: [] } } })).json().id;
+  const old = new Y.Doc();
+  applyDocToY(old, { title: 'Gammel', authors: '', group: '', folder: '', blocks: [] });
+  old.getArray('history').push([{ id: 'h1', what: 'Før' }, { id: 'h2', what: 'Enda før' }]);
+  app.db.prepare('INSERT INTO ydocs (doc_id, state, updated) VALUES (?, ?, ?)').run(id, Y.encodeStateAsUpdate(old), Date.now());
+  const m = yClient(id, H(adminTok)), h = yClient(id + '~hist', H(adminTok));
+  await Promise.all([m.ready, h.ready]); await wait(50);
+  assert.equal(m.doc.getArray('history').length, 0);
+  assert.deepEqual(h.doc.getArray('history').toArray().map(x => x.id), ['h1', 'h2']);
+  m.ws.close(); h.ws.close();
 });
 
 test('uten innlogging og uten lenketilgang stenges sanntid', async () => {

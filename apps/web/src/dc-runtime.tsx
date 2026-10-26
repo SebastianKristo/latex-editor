@@ -140,6 +140,8 @@ function renderNodes(nodes: Node[], scope: Scope, keyBase: string): React.ReactN
       else if (name === 'contentEditable') props.contentEditable = v === true || v === 'true';
       else if (name === 'suppressContentEditableWarning' || name === 'multiple' || name === 'autoFocus' || name === 'draggable') props[name] = v === true || v === 'true';
       else if (name === 'spellCheck') props.spellCheck = v === true || v === 'true';
+      // SVG-attributter som stroke-width skrives camelCase i React; data-/aria- beholdes.
+      else if (name.includes('-') && !/^(data|aria)-/.test(name)) props[name.replace(/-([a-z])/g, (_, c) => c.toUpperCase())] = v;
       else props[RENAME[name] || name] = v;
     }
     if (VOID.has(n.tag) || n.tag === 'textarea') delete props.children;

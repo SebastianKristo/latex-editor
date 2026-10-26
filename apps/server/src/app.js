@@ -11,7 +11,7 @@ import { compileTex, compileCache, synctexEdit, synctexView } from './compile.js
 import { sendMail, inviteMail, sharedMail, commentMail, testMail, smtpProblem, transport } from './mail.js';
 import { duckUpdate, startDuck, DUCK_RE, TOKEN_RE } from './duckdns.js';
 import { testSmb, runBackup, listBackups, restoreBackup, downloadBackup } from './backup.js';
-import { createSync } from './ysync.js';
+import { createSync, HIST, baseId } from './ysync.js';
 import { startTls } from './tls.js';
 
 const WEEK = 7 * 864e5;
@@ -66,6 +66,9 @@ export async function buildApp(cfg, { compile = compileTex, fetchImpl = fetch, b
     setCookie(reply, token);
     return { token, user: { id: u.id, email: u.email, name: u.name, role: u.role } };
   };
+  // Innstillinger › Server › TILGANG FOR ANDRE BRUKERE
+  const access = () => ({ histOthers: true, ...getSetting(db, 'access', {}) });
+  const histVisible = user => !!user && (user.role === 'admin' || access().histOthers !== false);
   const docTitle = id => (db.prepare('SELECT title FROM documents WHERE id = ?').get(id) || {}).title || '';
 
   // ---- sanntid (Yjs) ----
@@ -103,7 +106,7 @@ export async function buildApp(cfg, { compile = compileTex, fetchImpl = fetch, b
     setCookie(reply, '', 0);
     return { ok: true };
   });
-  app.get('/api/me', { preHandler: authed }, async req => ({ user: req.user }));
+  app.get('/api/me', { preHandler: authed }, async req => ({ user: req.user, access: { histOthers: histVisible(req.user) } }));
   app.put('/api/me', { preHandler: authed }, async (req, reply) => {
     const { name, password, current } = req.body || {};
     if (name) db.prepare('UPDATE users SET name = ? WHERE id = ?').run(String(name).slice(0, 80), req.user.id);
@@ -136,6 +139,7 @@ export async function buildApp(cfg, { compile = compileTex, fetchImpl = fetch, b
   app.get('/api/docs/:id', { preHandler: needRole('Kan lese') }, async req => ({ doc: sync.readDoc(req.params.id), role: req.docRole }));
   app.delete('/api/docs/:id', { preHandler: needRole('Eier') }, async req => {
     for (const t of ['memberships', 'invites', 'ydocs']) db.prepare(`DELETE FROM ${t} WHERE doc_id = ?`).run(req.params.id);
+    db.prepare('DELETE FROM ydocs WHERE doc_id = ?').run(req.params.id + HIST);
     db.prepare('DELETE FROM documents WHERE id = ?').run(req.params.id);
     return { ok: true };
   });
@@ -207,16 +211,23 @@ export async function buildApp(cfg, { compile = compileTex, fetchImpl = fetch, b
   });
 
   // ---- kompilering + SyncTeX ----
-  const cache = compileCache();
+  const cache = compileCache(), warnings = new Map();
   app.post('/api/compile', { preHandler: authed }, async (req, reply) => {
     const { tex, files, engine } = req.body || {};
     if (typeof tex !== 'string' || !tex.includes('\\documentclass')) return reply.code(400).send({ error: 'Mangler LaTeX-kilde.' });
     const r = await compile({ tex, files, engine, keep: true });
-    if (!r.ok) return reply.code(422).send({ errors: r.errors, log: r.log.slice(-20000), ms: r.ms });
+    if (!r.ok) return reply.code(422).send({ errors: r.errors, warnings: r.warnings || [], log: r.log.slice(-20000), ms: r.ms });
     reply.header('x-compile-ms', String(r.ms));
-    if (r.dir) reply.header('x-compile-id', cache.put(r.dir));
+    if (r.dir) {
+      const cid = cache.put(r.dir);
+      warnings.set(cid, r.warnings || []);
+      if (warnings.size > 24) warnings.delete(warnings.keys().next().value);
+      reply.header('x-compile-id', cid);
+    }
     return reply.type('application/pdf').send(r.pdf);
   });
+  // Advarsler fra siste vellykkede kompilering (PDF-svaret har ikke plass til dem)
+  app.get('/api/compile/:cid/log', { preHandler: authed }, async req => ({ warnings: warnings.get(req.params.cid) || [] }));
   app.post('/api/compile/:cid/edit', { preHandler: authed }, async (req, reply) => {
     const dir = cache.get(req.params.cid);
     if (!dir) return reply.code(404).send({ error: 'Kompiler på nytt.' });
@@ -230,17 +241,21 @@ export async function buildApp(cfg, { compile = compileTex, fetchImpl = fetch, b
   });
 
   // ---- administrasjon (kun admin) ----
-  const ADMIN_KEYS = ['duck', 'smb', 'smtp', 'deploy'];
+  const ADMIN_KEYS = ['duck', 'smb', 'smtp', 'deploy', 'access'];
   const adminState = () => Object.fromEntries(ADMIN_KEYS.map(k => [k, eff(k)]));
   const duckLog = [];
   let backupRun = null;
-  app.get('/api/admin/settings', { preHandler: admin }, async () => ({ ...adminState(), duckLog, backupRun }));
+  app.get('/api/admin/settings', { preHandler: admin }, async () => ({
+    ...adminState(), duckLog, backupRun,
+    users: db.prepare("SELECT COUNT(*) AS n, SUM(role = 'admin') AS admins FROM users").get()
+  }));
   app.put('/api/admin/settings', { preHandler: admin }, async (req, reply) => {
     const body = req.body || {};
     if (body.duck?.domain && !DUCK_RE.test(body.duck.domain)) return reply.code(400).send({ error: 'Subdomenet kan bare ha små bokstaver, tall og bindestrek.' });
     if (body.duck?.token && !TOKEN_RE.test(body.duck.token)) return reply.code(400).send({ error: 'Token må være en UUID.' });
     for (const k of ADMIN_KEYS) if (body[k] && typeof body[k] === 'object') setSetting(db, k, { ...getSetting(db, k, {}), ...body[k] });
     reschedule();
+    if (body.access && body.access.histOthers === false) sync.closeHistoryFor(u => !u || u.role !== 'admin');
     return adminState();
   });
   app.get('/api/admin/users', { preHandler: admin }, async () => db.prepare('SELECT id, email, name, role, created FROM users ORDER BY created').all());
@@ -290,10 +305,12 @@ export async function buildApp(cfg, { compile = compileTex, fetchImpl = fetch, b
   });
 
   app.get('/sync/:id', { websocket: true }, (socket, req) => {
-    const role = docRole(db, req.params.id, req.user);
+    const room = req.params.id, docId = baseId(room);
+    const role = docRole(db, docId, req.user);
     if (!req.user && !role) { socket.close(4401, 'Logg inn først'); return }
     if (!role) { socket.close(4403, 'Ingen tilgang'); return }
-    sync.handle(socket, req.params.id, req.user || { id: null, name: 'Gjest' }, role);
+    if (room !== docId && !histVisible(req.user)) { socket.close(4403, 'Historikk er slått av'); return }
+    sync.handle(socket, room, req.user || { id: null, name: 'Gjest' }, role);
   });
 
   // ---- web-klienten ----

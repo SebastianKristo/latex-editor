@@ -63,6 +63,12 @@ else
   git clone -q --depth 1 --branch "$BRANCH" "$REPO" "$APP/src"
   ok "$BRANCH @ $(git -C "$APP/src" rev-parse --short HEAD)"
 fi
+# En eldre kobling-update fortsetter med den nye versjonen av seg selv, så rettinger i skriptet tas med med en gang.
+NEW="$APP/src/deploy/proxmox/kobling-install.sh"
+if [ -z "${KOBLING_REEXEC:-}" ] && [ -f "$NEW" ] && [ -f "${BASH_SOURCE[0]:-}" ] && ! cmp -s "$NEW" "${BASH_SOURCE[0]}"; then
+  ok "skriptet er oppdatert, fortsetter med ny versjon"
+  KOBLING_REEXEC=1 exec bash "$NEW"
+fi
 
 # ---------- bygg ----------
 step "Bygger (pnpm, klient og server)"
@@ -76,6 +82,8 @@ pnpm --filter @kobling/server deploy --legacy --prod "$APP/app.new" >/dev/null
 cp -r apps/web/dist "$APP/app.new/web"
 cp deploy/proxmox/kobling-install.sh /usr/local/sbin/kobling-update
 chmod 755 /usr/local/sbin/kobling-update
+# pct exec har ikke /usr/local/sbin i PATH; /usr/bin finnes alltid.
+ln -sf /usr/local/sbin/kobling-update /usr/bin/kobling-update
 ok "bygget"
 
 # ---------- bruker, data og innstillinger ----------

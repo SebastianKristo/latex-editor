@@ -78,7 +78,8 @@ export async function startTls(app, { getDuck, dataDir, port, email, log, direct
     });
   };
   const ensure = () => (running ||= run().catch(e => log({ ok: false, txt: 'HTTPS: ' + e.message })).finally(() => { running = null }));
-  await ensure();
+  // Ikke vent: å hente et nytt sertifikat tar 1–2 minutter, og serveren skal svare på HTTP imens.
+  ensure();
   const timer = setInterval(() => { if (!stopped) ensure() }, DAY);
   return { ensure, stop: () => { stopped = true; clearInterval(timer); server?.close() } };
 }

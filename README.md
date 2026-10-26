@@ -13,7 +13,7 @@ Designgrunnlaget ligger i `design_handoff_kobling/` (prototype, mal og deploy-fi
 | `apps/web` | Klienten (React 18 + Vite). UI-et kjøres fra prototypens mal (`src/template.html`) via `src/dc-runtime.tsx`, så utseende og tekster er de samme som i prototypen. `src/server-mode.js` kobler appen til serveren, `src/ysocket.ts` er Yjs-tilkoblingen, `src/PdfView.tsx` viser PDF med pdf.js, og `src/Login.tsx` er innlogging og førstegangsoppsett. |
 | `apps/server` | Node 22 + Fastify + SQLite (`node:sqlite`): kontoer, roller, invitasjoner, Yjs-synk, kompilering med `latexmk` og SyncTeX, SMTP, DuckDNS, Let's Encrypt og SMB-backup. |
 | `apps/desktop` | Tauri 2-skall (macOS .dmg, Windows .msi, Linux .deb) rundt `apps/web`. |
-| `deploy/` | `generators.js` og ferdige filer for Proxmox, Unraid og Docker Compose. |
+| `deploy/` | `generators.js` og ferdige filer for Proxmox, Unraid og Docker Compose, pluss Proxmox-helper-skriptet `proxmox/kobling.sh` (se `deploy/README.md`). |
 
 ## Kom i gang
 
@@ -49,7 +49,7 @@ Konfigureres med miljøvariablene i `deploy/.env.example`. I tillegg finnes diss
 docker build -t ghcr.io/sebastiankristo/kobling-server .
 ```
 
-Imaget bygger på Debian 13 (trixie, TeX Live 2024). Grunnimaget kan overstyres med `--build-arg RUNTIME=ubuntu:24.04`. Bak en proxy som inspiserer TLS kan rot-sertifikatet gis med `--secret id=ca,src=<ca.pem>`. CI bygger og publiserer imaget fra `main`. Desktop-appene bygges av `.github/workflows/desktop.yml` på macOS og Windows.
+Imaget bygger på Debian 13 (trixie, TeX Live 2024). Grunnimaget kan overstyres med `--build-arg RUNTIME=ubuntu:24.04`. Bak en proxy som inspiserer TLS kan rot-sertifikatet gis med `--secret id=ca,src=<ca.pem>`. CI bygger og publiserer imaget fra `main`. Desktop-appene bygges av `.github/workflows/desktop.yml` på macOS og Windows og legges i en GitHub Release når en `v*`-tagg pushes.
 
 ## Verifisert
 
@@ -74,5 +74,5 @@ Imaget bygger på Debian 13 (trixie, TeX Live 2024). Grunnimaget kan overstyres 
 - **Proton Mail:** ikke testet mot ekte Proton SMTP, fordi det krever konto og token. Samme kode er testet mot en lokal SMTP-server med STARTTLS og innlogging.
 - **Let's Encrypt:** utvekslingen er ikke kjørt mot Let's Encrypt, fordi det krever et ekte DuckDNS-domene. Servering med sertifikat og fornyelseslogikken er testet.
 - **Desktop-installere:** macOS (.dmg) og Windows (.msi) bygges bare i CI på egne runnere og er ikke kjørt her. Appene er ikke signert.
-- **Proxmox:** `install.sh` er bare syntakssjekket, siden det krever en Proxmox-node.
+- **Proxmox:** ikke kjørt på en ekte Proxmox-node. Helper-skriptet `kobling.sh` er testet med simulerte Proxmox-kommandoer, og installasjonsdelen (`kobling-install.sh`, inkludert `kobling-update`) er kjørt i en ren Ubuntu 24.04-container. Det Docker-baserte `install.sh` er bare syntakssjekket.
 - **Debian trixie-imaget:** Docker-imaget er testet med Ubuntu 24.04 som grunnimage, fordi Debian-speilene ikke var tilgjengelige her. Standardimaget (Debian trixie) bygges i CI.

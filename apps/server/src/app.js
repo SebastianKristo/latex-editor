@@ -253,7 +253,7 @@ export async function buildApp(cfg, { compile = compileTex, fetchImpl = fetch, b
   app.post('/api/admin/duckdns/update', { preHandler: admin }, async () => {
     const r = await duckUpdate(eff('duck'), fetchImpl);
     duckLog.unshift({ t: Date.now(), ok: r.ok, txt: r.msg, ip: r.ip || '' });
-    duckLog.length = Math.min(duckLog.length, 8);
+    duckLog.length = Math.min(duckLog.length, 12);
     return { ...r, log: duckLog };
   });
   app.post('/api/admin/smtp/test', { preHandler: admin }, async req => {
@@ -304,21 +304,26 @@ export async function buildApp(cfg, { compile = compileTex, fetchImpl = fetch, b
   }
 
   // ---- bakgrunnsjobber ----
-  let job = null, stopDuck = null, stopTls = null;
+  let job = null, stopDuck = null, tls = null;
   function reschedule() {
     if (!background) return;
+    tls?.ensure(); // HTTPS slås av/på og sertifikat hentes straks innstillingene endres
     job?.stop();
     const s = eff('smb');
     if (s.on && cron.validate(s.cron)) job = cron.schedule(s.cron, () => { sync.flushAll(); runBackup(db, eff('smb')).then(r => { lastBackup = r; app.log.info({ backup: r }) }) });
   }
   if (background) {
     reschedule();
-    stopDuck = startDuck(() => eff('duck'), r => { duckLog.unshift({ t: Date.now(), ok: r.ok, txt: r.msg, ip: r.ip || '' }); duckLog.length = Math.min(duckLog.length, 8) });
+    stopDuck = startDuck(() => eff('duck'), r => { duckLog.unshift({ t: Date.now(), ok: r.ok, txt: r.msg, ip: r.ip || '' }); duckLog.length = Math.min(duckLog.length, 12) });
     app.addHook('onReady', async () => {
-      stopTls = await startTls(app, { getDuck: () => eff('duck'), dataDir: cfg.dataDir, port: cfg.httpsPort, email: cfg.adminEmail || eff('smtp').user, log: x => app.log.info(x) });
+      tls = await startTls(app, {
+        getDuck: () => eff('duck'), dataDir: cfg.dataDir, port: cfg.httpsPort,
+        email: cfg.adminEmail || eff('smtp').user || (db.prepare("SELECT email FROM users WHERE role = 'admin' ORDER BY created LIMIT 1").get() || {}).email,
+        log: x => { app.log.info({ tls: x.txt }); duckLog.unshift({ t: Date.now(), ok: x.ok, txt: x.txt, ip: '' }); duckLog.length = Math.min(duckLog.length, 12) }
+      });
     });
   }
-  app.addHook('onClose', async () => { job?.stop(); stopDuck?.(); stopTls?.(); sync.flushAll(); cache.clear(); db.close() });
+  app.addHook('onClose', async () => { job?.stop(); stopDuck?.(); tls?.stop(); sync.flushAll(); cache.clear(); db.close() });
   app.decorate('sync', sync);
   return app;
 }

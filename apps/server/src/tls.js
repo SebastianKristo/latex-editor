@@ -46,28 +46,39 @@ export async function obtainCert({ d, dir, email, directoryUrl = LE_PROD, fetchI
   return { cert: String(cert), key: String(key), days: daysLeft(String(cert)) };
 }
 
-// Starter HTTPS-serveren foran Fastify-appen og fornyer daglig ved behov.
+// Starter HTTPS-serveren foran Fastify-appen. ensure() kjøres ved oppstart, når innstillingene
+// endres og daglig: henter/fornyer sertifikatet og starter eller stopper lytteren.
+// log får korte meldinger på norsk ({ ok, txt }) som vises i DuckDNS-loggen i appen.
 export async function startTls(app, { getDuck, dataDir, port, email, log, directoryUrl }) {
   const dir = join(dataDir, 'tls');
-  let cur = await loadCert(dir), server = null, stopped = false;
-  const ensure = async () => {
+  let cur = await loadCert(dir), server = null, stopped = false, running = null;
+  const stopServer = () => { if (server) { server.close(); server = null; log({ ok: true, txt: 'HTTPS er slått av' }) } };
+  const run = async () => {
     const d = getDuck();
-    if (!d.tls || !d.domain || !d.token) return;
+    if (!d.tls || !d.domain || !d.token) return stopServer();
     if (!cur || cur.days < 30) {
-      try { cur = await obtainCert({ d, dir, email, directoryUrl }); log({ tls: 'nytt sertifikat', days: Math.round(cur.days) }) }
-      catch (e) {
-        log({ tls: 'fornyelse feilet', error: e.message });
+      log({ ok: true, txt: `HTTPS: henter sertifikat for ${d.domain}.duckdns.org (tar 1–2 min) …` });
+      try {
+        cur = await obtainCert({ d, dir, email: /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email || '') ? email : undefined, directoryUrl });
+        log({ ok: true, txt: `HTTPS: sertifikat hentet, gyldig i ${Math.round(cur.days)} dager` });
+      } catch (e) {
+        log({ ok: false, txt: 'HTTPS: kunne ikke hente sertifikat: ' + e.message });
         if (!cur || cur.days <= 0) return; // ellers brukes sertifikatet vi har til det går ut
       }
     }
-    if (!server) {
-      server = createServer({ cert: cur.cert, key: cur.key }, (req, res) => app.routing(req, res));
-      server.on('upgrade', (req, sock, head) => app.server.emit('upgrade', req, sock, head));
-      server.listen(port, '0.0.0.0');
-      log({ tls: 'lytter', port });
-    } else server.setSecureContext({ cert: cur.cert, key: cur.key });
+    if (server) return server.setSecureContext({ cert: cur.cert, key: cur.key });
+    const srv = createServer({ cert: cur.cert, key: cur.key }, (req, res) => app.routing(req, res));
+    srv.on('upgrade', (req, sock, head) => app.server.emit('upgrade', req, sock, head));
+    await new Promise(res => {
+      srv.once('error', e => {
+        log({ ok: false, txt: e.code === 'EACCES' ? `HTTPS: mangler rettighet til port ${port} (se installasjonsveiledningen)` : e.code === 'EADDRINUSE' ? `HTTPS: port ${port} er opptatt` : 'HTTPS: ' + e.message });
+        res();
+      });
+      srv.listen(port, '0.0.0.0', () => { server = srv; log({ ok: true, txt: `HTTPS kjører på port ${port}` }); res() });
+    });
   };
+  const ensure = () => (running ||= run().catch(e => log({ ok: false, txt: 'HTTPS: ' + e.message })).finally(() => { running = null }));
   await ensure();
   const timer = setInterval(() => { if (!stopped) ensure() }, DAY);
-  return () => { stopped = true; clearInterval(timer); server?.close() };
+  return { ensure, stop: () => { stopped = true; clearInterval(timer); server?.close() } };
 }

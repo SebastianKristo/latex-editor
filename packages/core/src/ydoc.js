@@ -7,7 +7,7 @@
 // Blokker er atomære verdier: samtidige endringer i ulike blokker flettes, i samme blokk vinner siste.
 import * as Y from 'yjs';
 
-export const META_KEYS = ['title', 'authors', 'group', 'folder', 'meta'];
+export const META_KEYS = ['title', 'authors', 'group', 'folder', 'meta', 'preamble'];
 export const HISTORY_MAX = 60;
 
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
@@ -26,7 +26,7 @@ export const isEmptyY = ydoc => ydoc.getArray('order').length === 0 && !ydoc.get
 export function applyDocToY(ydoc, doc, origin) {
   const meta = ydoc.getMap('meta'), blocks = ydoc.getMap('blocks'), order = ydoc.getArray('order');
   ydoc.transact(() => {
-    META_KEYS.forEach(k => { if (doc[k] !== undefined && meta.get(k) !== doc[k]) meta.set(k, doc[k]) });
+    META_KEYS.forEach(k => { if (doc[k] !== undefined && (meta.get(k) ?? '') !== doc[k]) meta.set(k, doc[k]) });
     const ids = doc.blocks.map(b => b.id);
     doc.blocks.forEach(b => { if (!same(blocks.get(b.id), b)) blocks.set(b.id, b) });
     const cur = order.toArray();

@@ -88,7 +88,7 @@ export class ServerSession {
     if (this.user.role === 'admin') this.loadAdmin();
     this.loadMails();
   }
-  unmount() { this.ys?.destroy(); clearTimeout(this.adminTimer); clearInterval(this.bkTimer) }
+  unmount() { this.ys?.destroy(); clearTimeout(this.adminTimer); clearInterval(this.bkTimer); clearInterval(this.duckPoll) }
 
   update(ps) {
     const s = this.app.state;
@@ -111,6 +111,10 @@ export class ServerSession {
     if (!ps.share && s.share) { this.loadPeople(); this.loadMails() }
     if (ps.view !== s.view && s.view === 'projects') this.refreshDocs();
     if (ps.setTab !== s.setTab && s.setTab === 'backup' && this.user.role === 'admin') this.loadBackups();
+    // DuckDNS-fanen: hent loggen jevnlig, så HTTPS-status og IP-oppdateringer vises uten å laste på nytt.
+    const onDuck = s.view === 'settings' && s.setTab === 'duck' && this.user.role === 'admin';
+    if (onDuck && !this.duckPoll) this.duckPoll = setInterval(() => this.refreshDuckLog(), 4000);
+    if (!onDuck && this.duckPoll) { clearInterval(this.duckPoll); this.duckPoll = null }
     if (this.adminLoaded && !this.adminRemote && ['duck', 'smb', 'smtp', 'deploy'].some(k => ps[k] !== s[k])) {
       clearTimeout(this.adminTimer);
       this.adminTimer = setTimeout(() => this.saveAdmin(), 600);
@@ -353,6 +357,13 @@ export class ServerSession {
     if (body.duck.domain && !/^[a-z0-9-]{1,63}$/.test(body.duck.domain)) delete body.duck;
     else if (body.duck.token && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(body.duck.token)) delete body.duck;
     try { await api('PUT', '/api/admin/settings', body) } catch (e) { if (e.status !== 400) this.app.toast(e.message) }
+  }
+
+  async refreshDuckLog() {
+    try {
+      const r = await api('GET', '/api/admin/settings');
+      this.app.dku(x => ({ log: (r.duckLog || []).map(logRow), ip: (r.duckLog || []).find(l => l.ip)?.ip || x.ip }));
+    } catch { /* */ }
   }
 
   async duckUpdate() {

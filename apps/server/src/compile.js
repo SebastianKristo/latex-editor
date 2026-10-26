@@ -21,21 +21,54 @@ export async function compileTex({ tex, files = {}, engine = 'pdfLaTeX', timeout
     const t0 = Date.now();
     const { code, out } = await run('latexmk', [flag, '-interaction=nonstopmode', '-halt-on-error', '-synctex=1', '-no-shell-escape', 'main.tex'], dir, timeoutMs);
     const log = await readFile(join(dir, 'main.log'), 'utf8').catch(() => out);
-    if (code !== 0) return { ok: false, log, errors: texErrors(log), ms: Date.now() - t0 };
+    if (code !== 0) return { ok: false, log, errors: texErrors(log), warnings: texWarnings(log), ms: Date.now() - t0 };
     const pdf = await readFile(join(dir, 'main.pdf'));
     kept = keep;
-    return { ok: true, pdf, log, ms: Date.now() - t0, dir: keep ? dir : null };
+    return { ok: true, pdf, log, warnings: texWarnings(log), ms: Date.now() - t0, dir: keep ? dir : null };
   } finally {
     if (!kept) rm(dir, { recursive: true, force: true }).catch(() => {});
   }
 }
 
+// Norsk forklaring til vanlige TeX-meldinger (vises under den engelske meldingen i loggen).
+const EXPLAIN = [
+  [/Undefined control sequence/, 'Ukjent kommando. Sjekk stavemåten, eller om pakken som definerer den er lastet.'],
+  [/Missing \$ inserted/, 'Matte-tegn (_ ^ \\alpha …) brukt utenfor matte-modus. Sett uttrykket i $ … $.'],
+  [/File `([^']+)' not found/, 'Filen mangler. Last opp bildet med akkurat dette navnet, eller rett filnavnet.'],
+  [/Environment (\S+) undefined/, 'Ukjent miljø. Mangler du en pakke i preamblen?'],
+  [/Missing \} inserted|Extra \}|Extra alignment tab|Runaway argument|Paragraph ended before/, 'Klammene { } stemmer ikke, eller en kommando mangler argument.'],
+  [/\\begin\{([^}]+)\} on input line \d+ ended by \\end/, '\\begin og \\end hører ikke sammen.'],
+  [/Misplaced alignment tab character &/, '& brukt utenfor en tabell. Skriv \\& for et vanlig &-tegn.'],
+  [/Reference `[^']+' on page \d+ undefined/, 'Referansen peker på en \\label som ikke finnes.'],
+  [/Label `[^']+' multiply defined/, 'Samme \\label er brukt flere ganger.'],
+  [/Citation `[^']+'.*undefined/, 'Kilden finnes ikke i litteraturlisten.']
+];
+export const explain = msg => (EXPLAIN.find(([re]) => re.test(msg)) || [, ''])[1];
+
+// Feil («! …» med «l.NN») og advarsler («LaTeX Warning: … on input line NN») fra latexmk-loggen.
+// Linjenumrene gjelder main.tex, som er den samme koden som vises i kodevisningen.
 export function texErrors(log) {
   const out = [], lines = log.split('\n');
   lines.forEach((l, i) => {
     if (!l.startsWith('! ')) return;
     const ln = lines.slice(i, i + 8).join('\n').match(/l\.(\d+)/);
-    out.push({ message: l.slice(2), line: ln ? Number(ln[1]) : null });
+    const message = l.slice(2).replace(/^LaTeX Error: /, '');
+    out.push({ message, line: ln ? Number(ln[1]) : null, hint: explain(message) });
+  });
+  return out;
+}
+
+export function texWarnings(log) {
+  const out = [], seen = new Set();
+  // advarsler kan gå over flere linjer (fortsettelser starter med mellomrom eller «(pakke)»)
+  log.replace(/\r/g, '').split(/\n(?=[^\s(])|\n\n/).forEach(chunk => {
+    const t = chunk.replace(/\n/g, ' ').replace(/\s+/g, ' ').trim();
+    const m = t.match(/^(?:LaTeX|Package \S+) Warning: (.*?)(?: on input line (\d+))?\.?$/);
+    if (!m || /^There were undefined references|^Label\(s\) may have changed|^Rerun to get/.test(m[1])) return;
+    const k = m[1] + '|' + m[2];
+    if (seen.has(k)) return;
+    seen.add(k);
+    out.push({ message: m[1], line: m[2] ? Number(m[2]) : null, hint: explain(m[1]) });
   });
   return out;
 }

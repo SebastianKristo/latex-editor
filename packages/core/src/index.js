@@ -1,9 +1,9 @@
 // Opprinnelig løftet fra prototypen (tools/extract-prototype.mjs). Ren logikk uten DOM.
 /* eslint-disable */
-const ACC = 'oklch(0.52 0.15 250)',
-  ACCL = 'oklch(0.95 0.03 250)',
-  ACCB = 'oklch(0.86 0.06 250)',
-  HL = 'oklch(0.93 0.04 250)';
+const ACC = 'oklch(0.55 0.17 255)',
+  ACCL = 'var(--koklch095003250,oklch(0.95 0.03 250))',
+  ACCB = 'var(--koklch086006250,oklch(0.86 0.06 250))',
+  HL = 'var(--koklch093004250,oklch(0.93 0.04 250))';
 const PFX = [
   { k: '', s: '', n: 'ingen', c: '' },
   { k: 'p', s: 'p', n: 'piko', c: '\\pico' },
@@ -203,7 +203,7 @@ const USERS = {
   MH: { name: 'Mia', full: 'Mia Hansen', color: 'oklch(0.62 0.13 150)' },
   EL: { name: 'Emil', full: 'Emil Larsen', color: 'oklch(0.62 0.13 300)' }
 };
-const KIND = { abstract: 'abs', h1: '§', h2: '§§', p: '¶', eq: 'eq', fig: 'fig', img: 'img', table: 'tab', raw: 'tex' };
+const KIND = { abstract: 'abs', h1: '§', h2: '§§', p: '¶', eq: 'eq', fig: 'fig', img: 'img', table: 'tab', raw: 'TeX' };
 const GROUPS = ['ADK 61 · ELI1300', 'Lab-par · ELPE1300', 'Privat'];
 const TPLS = [
   { k: 'rapport', name: 'Rapportmal ELI1300', desc: 'Jetlund 2025 · tospalte, 11pt, siunitx, circuitikz' },
@@ -381,28 +381,33 @@ function circLines(d, style) {
 }
 function tok(s) {
   const out = [],
-    re = /(\\[a-zA-Z]+|%.*$|\$[^$]*\$)/g;
+    P = (t, c, fs) => out.push({ t, c, fs: fs || 'normal' }),
+    re =
+      /(\\(begin|end|label|cref|Cref|ref|eqref|includegraphics|usepackage|documentclass|input)\{[^}]*\}|\\[a-zA-Z]+|%.*$|\$[^$]*\$)/g;
   let last = 0,
     m;
   while ((m = re.exec(s))) {
-    if (m.index > last) out.push({ t: s.slice(last, m.index), c: '#3d3a36' });
+    if (m.index > last) P(s.slice(last, m.index), 'var(--syn-txt,#30343c)');
     const x = m[0];
-    let c;
-    if (x[0] === '%') c = '#a29e97';
-    else if (x[0] === '$') c = 'oklch(0.5 0.13 150)';
-    else if (/^\\(qty|unit|num|cref|Cref|label|ref|caption)$/.test(x)) c = 'oklch(0.5 0.15 250)';
-    else if (
+    if (x[0] === '%') P(x, 'var(--syn-com,#8b919c)');
+    else if (x[0] === '$') P(x, 'var(--syn-math,oklch(0.52 0.14 150))');
+    else if (m[2]) {
+      const k = x.indexOf('{');
+      P(x.slice(0, k), 'var(--syn-cmd,oklch(0.5 0.16 270))', 'italic');
+      P('{', 'var(--syn-txt,#30343c)');
+      P(x.slice(k + 1, -1), 'var(--syn-arg,oklch(0.56 0.14 60))', 'italic');
+      P('}', 'var(--syn-txt,#30343c)');
+    } else if (
       /^\\(ohm|volt|ampere|watt|farad|henry|hertz|second|siemens|decibel|coulomb|joule|kelvin|degree|kilo|mega|giga|milli|micro|nano|pico)$/.test(
         x
       )
     )
-      c = 'oklch(0.52 0.15 30)';
-    else c = 'oklch(0.48 0.15 300)';
-    out.push({ t: x, c });
+      P(x, 'var(--syn-unit,oklch(0.56 0.14 60))', 'italic');
+    else P(x, 'var(--syn-cmd,oklch(0.5 0.16 270))', 'italic');
     last = m.index + x.length;
   }
-  if (last < s.length) out.push({ t: s.slice(last), c: '#3d3a36' });
-  if (!out.length) out.push({ t: ' ', c: '#3d3a36' });
+  if (last < s.length) P(s.slice(last), 'var(--syn-txt,#30343c)');
+  if (!out.length) P(' ', 'var(--syn-txt,#30343c)');
   return out;
 }
 function preamble(S) {
@@ -434,8 +439,7 @@ function docCode(doc, S) {
   const L = [],
     P = (s, bid) => L.push({ s, bid: bid || null });
   preamble(S).forEach(s => P(s));
-  // Egne preamble-linjer fra kodeeditoren (f.eks. ekstra \usepackage)
-  if (doc.preamble) doc.preamble.split('\n').forEach(s => P(s));
+  (doc.pre || []).forEach(s => P(s));
   P('');
   P(`\\title{${esc(doc.title)}}`);
   P(`\\author{${esc(doc.authors)}\\\\${esc(doc.group)}}`);
@@ -445,12 +449,12 @@ function docCode(doc, S) {
   doc.blocks.forEach(b => {
     const i = b.id;
     P('', null);
-    if (b.type === 'abstract') {
+    if (b.type === 'raw') (b.src || '').split('\n').forEach(x => P(x, i));
+    else if (b.type === 'abstract') {
       P('\\begin{abstract}', i);
       P('  ' + esc(b.text), i);
       P('\\end{abstract}', i);
-    } else if (b.type === 'raw') (b.src || '').split('\n').forEach(l => P(l, i));
-    else if (b.type === 'h1') P(`\\section{${esc(b.text)}}`, i);
+    } else if (b.type === 'h1') P(`\\section{${esc(b.text)}}`, i);
     else if (b.type === 'h2') P(`\\subsection{${esc(b.text)}}`, i);
     else if (b.type === 'p') P(b.segs.map(segTex).join(''), i);
     else if (b.type === 'eq') {
@@ -575,10 +579,13 @@ function paginate(blocks, cols, dec) {
         return cols === 2 ? (b.span ? 7 : 11) : 13;
       case 'img':
         return Math.round((cols === 2 && !b.span ? 15 : 11) * (b.w || 0.8)) + 3;
+      case 'raw': {
+        const s = (b.src || '').replace(/\\begin\{(tikzpicture|circuitikz)\}[\s\S]*?\\end\{\1\}/g, '\n\n\n\n\n\n');
+        const cols2 = /\\begin\{multicols\}\{2\}/.test(s) && cols !== 2 ? 0.55 : 1;
+        return Math.max(1.5, (s.split('\n').filter(l => l.trim()).length * 0.95 + (s.length / cpl) * 0.25) * cols2);
+      }
       case 'table':
         return b.style === 'list' ? b.rows.length * 1.3 + 1 : b.rows.length * 1.5 + 4;
-      case 'raw':
-        return (b.src || '').split('\n').length * 1.1;
       default:
         return 1;
     }
@@ -591,6 +598,7 @@ function paginate(blocks, cols, dec) {
     }
     pages[pages.length - 1].push(b);
     used += x;
+    if (used > cap) pages[pages.length - 1].over = true;
   });
   return pages;
 }
@@ -816,7 +824,9 @@ const DEF_SET = {
   engine: 'pdfLaTeX',
   auto: true,
   server: 'https://kobling.app',
-  sync: true
+  sync: true,
+  histOthers: true,
+  theme: 'system'
 };
 const DEF_DUCK = { on: false, domain: '', token: '', interval: 5, ipv6: false, tls: false };
 const DEF_SMB = {
@@ -850,25 +860,31 @@ const DEF_DEP = {
 const DUCK_RE = /^[a-z0-9-]{1,63}$/,
   TOKEN_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 function tokSh(s) {
-  if (/^\s*(#|<!--)/.test(s)) return [{ t: s, c: '#a29e97' }];
+  return tokSh0(s).map(p => ({ fs: 'normal', ...p }));
+}
+function tokSh0(s) {
+  if (/^\s*(#|<!--)/.test(s)) return [{ t: s, c: 'var(--ka29e97,#a29e97)' }];
   const m = s.match(/^(\s*)([A-Z_][A-Z0-9_]*)(=)(.*)$/);
   if (m)
     return [
-      { t: m[1] + m[2], c: 'oklch(0.5 0.15 250)' },
-      { t: '=', c: '#3d3a36' },
-      { t: m[4] || ' ', c: 'oklch(0.5 0.13 150)' }
+      { t: m[1] + m[2], c: 'var(--koklch05015250,oklch(0.5 0.15 250))' },
+      { t: '=', c: 'var(--k3d3a36,#3d3a36)' },
+      { t: m[4] || ' ', c: 'var(--koklch05013150,oklch(0.5 0.13 150))' }
     ];
   const out = [],
     re = /(<\/?[A-Za-z?][^>]*>|"[^"]*")/g;
   let last = 0,
     mm;
   while ((mm = re.exec(s))) {
-    if (mm.index > last) out.push({ t: s.slice(last, mm.index), c: '#3d3a36' });
-    out.push({ t: mm[0], c: mm[0][0] === '<' ? 'oklch(0.48 0.15 300)' : 'oklch(0.5 0.13 150)' });
+    if (mm.index > last) out.push({ t: s.slice(last, mm.index), c: 'var(--k3d3a36,#3d3a36)' });
+    out.push({
+      t: mm[0],
+      c: mm[0][0] === '<' ? 'var(--koklch048015300,oklch(0.48 0.15 300))' : 'var(--koklch05013150,oklch(0.5 0.13 150))'
+    });
     last = mm.index + mm[0].length;
   }
-  if (last < s.length) out.push({ t: s.slice(last), c: '#3d3a36' });
-  return out.length ? out : [{ t: ' ', c: '#3d3a36' }];
+  if (last < s.length) out.push({ t: s.slice(last), c: 'var(--k3d3a36,#3d3a36)' });
+  return out.length ? out : [{ t: ' ', c: 'var(--k3d3a36,#3d3a36)' }];
 }
 const unesc = s => (s || '').replace(/\\([%&#_$])/g, '$1');
 function parseInline(s) {
@@ -968,6 +984,1227 @@ function parseBlock(b, code) {
     }
   }
   return {};
+}
+const qtyBack = s =>
+  s.replace(/\\qty\{([^}]*)\}\{([^}]*)\}/g, (m, n, us) => {
+    us = us.trim();
+    const p = PFX.find(x => x.c && us.startsWith(x.c)),
+      rest = p ? us.slice(p.c.length) : us,
+      uu = UNITS.find(x => x.c === rest);
+    return uu ? n + ' ' + (p ? p.s : '') + uu.s : m;
+  });
+const cellBack = s => unesc(qtyBack(s.replace(/\\textbf\{([^}]*)\}/g, '$1')).trim());
+const wsn = s => (s || '').replace(/%.*$/gm, '').replace(/\s+/g, ' ').trim();
+function parseDoc(src, doc, S) {
+  const lines = src.split('\n'),
+    E = (line, msg) => {
+      throw { line, msg };
+    };
+  const settings = {},
+    pre = [],
+    gen = new Set(preamble(S).map(x => x.trim()));
+  let title = doc.title,
+    authors = doc.authors,
+    group = doc.group,
+    noIndent = false;
+  const bi = lines.findIndex(l => /^\s*\\begin\{document\}/.test(l));
+  if (bi < 0) E(lines.length, 'Fant ikke \\begin{document}');
+  let ei = -1;
+  for (let i = lines.length - 1; i > bi; i--)
+    if (/^\s*\\end\{document\}/.test(lines[i])) {
+      ei = i;
+      break;
+    }
+  if (ei < 0) E(lines.length, 'Mangler \\end{document}');
+  for (let i = 0; i < bi; i++) {
+    const l = lines[i],
+      tl = l.trim();
+    let m;
+    if (!tl) continue;
+    if ((m = tl.match(/^\\documentclass(?:\[([^\]]*)\])?\{([^}]*)\}/))) {
+      const o = (m[1] || '').split(',').map(x => x.trim());
+      const sz = o.find(x => /^(10|11|12)pt$/.test(x));
+      if (sz) settings.size = sz;
+      settings.cols = o.includes('twocolumn') ? 2 : 1;
+      continue;
+    }
+    if ((m = tl.match(/^\\title\{(.*)\}$/))) {
+      title = unesc(m[1]);
+      continue;
+    }
+    if ((m = tl.match(/^\\author\{(.*)\}$/))) {
+      const p = m[1].split('\\\\');
+      authors = unesc(p[0].trim());
+      group = unesc((p[1] || '').trim());
+      continue;
+    }
+    if (/^\\date\{/.test(tl)) continue;
+    if ((m = tl.match(/output-decimal-marker\s*=\s*\{(.)\}/))) {
+      settings.dec = m[1];
+      continue;
+    }
+    if (/output-complex-root/.test(tl) && (m = tl.match(/\\mathit\{(.)\}/))) {
+      settings.imag = m[1];
+      continue;
+    }
+    if ((m = tl.match(/^\\usepackage\[(european|american)\]\{circuitikz\}/))) {
+      settings.style = m[1];
+      continue;
+    }
+    if (tl === '\\setlength{\\parindent}{0pt}') {
+      noIndent = true;
+      continue;
+    }
+    if (gen.has(tl)) continue;
+    pre.push(l);
+  }
+  settings.indent = !noIndent;
+  const raw = [];
+  let i = bi + 1;
+  while (i < ei) {
+    const l = lines[i].trim();
+    if (!l || l === '\\maketitle' || l[0] === '%') {
+      i++;
+      continue;
+    }
+    let m = l.match(/^\\begin\{(abstract|equation|figure\*?|table|itemize)\}/);
+    if (m) {
+      const env = m[1];
+      let j = i;
+      while (j < ei && !lines[j].includes('\\end{' + env + '}')) j++;
+      if (j >= ei) E(i + 1, 'Mangler \\end{' + env + '}');
+      raw.push({ env, text: lines.slice(i, j + 1).join('\n'), line: i + 1 });
+      i = j + 1;
+      continue;
+    }
+    if ((m = l.match(/^\\(sub)?section\*?\{/))) {
+      raw.push({ env: m[1] ? 'h2' : 'h1', text: l, line: i + 1 });
+      i++;
+      continue;
+    }
+    if ((m = l.match(/^\\begin\{([^}]+)\}/))) {
+      const env = m[1],
+        b = '\\begin{' + env + '}',
+        e = '\\end{' + env + '}';
+      let dep = 0,
+        j = i;
+      for (; j < ei; j++) {
+        dep += lines[j].split(b).length - 1;
+        dep -= lines[j].split(e).length - 1;
+        if (dep <= 0) break;
+      }
+      if (j >= ei) E(i + 1, 'Mangler ' + e);
+      raw.push({ env: 'raw', text: lines.slice(i, j + 1).join('\n'), line: i + 1 });
+      i = j + 1;
+      continue;
+    }
+    const st = i;
+    while (i < ei) {
+      const x = lines[i].trim();
+      if (!x || (i > st && /^\\(begin\{|section|subsection)/.test(x))) break;
+      i++;
+    }
+    raw.push({ env: 'p', text: lines.slice(st, i).join('\n'), line: st + 1 });
+  }
+  const pool = {};
+  doc.blocks.forEach(b => (pool[b.type] = pool[b.type] || []).push(b));
+  const take = (type, pred) => {
+    const q = pool[type] || [];
+    let k = pred ? q.findIndex(pred) : -1;
+    if (k < 0) k = 0;
+    return q.length ? q.splice(k, 1)[0] : null;
+  };
+  const blocks = raw.map(r => {
+    try {
+      const cap = () => {
+          const m = r.text.match(/\\caption\{(.*)\}/);
+          return m ? unesc(m[1]) : '';
+        },
+        lab = () => {
+          const m = r.text.match(/\\label\{([^}]*)\}/);
+          return m ? m[1] : null;
+        };
+      if (r.env === 'raw') {
+        const o = take('raw') || { id: uid(), type: 'raw' };
+        return { ...o, src: r.text };
+      }
+      if (r.env === 'p' && /^\\(?!qty\{|cref\{)([a-zA-Z]+|\[)/.test(r.text.trim())) {
+        const o = take('raw') || { id: uid(), type: 'raw' };
+        return { ...o, src: r.text };
+      }
+      if (r.env === 'p') {
+        const o = take('p');
+        try {
+          const b0 = o || { id: uid(), type: 'p' };
+          return { ...b0, ...parseBlock(b0, r.text) };
+        } catch (err) {
+          if (o) (pool.p = pool.p || []).unshift(o);
+          const q = take('raw') || { id: uid(), type: 'raw' };
+          return { ...q, src: r.text };
+        }
+      }
+      if (r.env === 'h1' || r.env === 'h2' || r.env === 'abstract') {
+        const o = take(r.env) || { id: uid(), type: r.env };
+        return { ...o, ...parseBlock(o, r.text) };
+      }
+      if (r.env === 'equation') {
+        const o = take('eq') || { id: uid(), type: 'eq', label: 'eq:' + uid().slice(0, 4) };
+        return { ...o, ...parseBlock(o, r.text) };
+      }
+      if (r.env.startsWith('figure')) {
+        const span = r.env === 'figure*';
+        const tz = r.text.match(/\\begin\{circuitikz\}[\s\S]*?\\end\{circuitikz\}/);
+        if (tz) {
+          const o = take('fig') || { id: uid(), type: 'fig', label: 'fig:krets-' + uid().slice(0, 4) };
+          let circuit = o.circuit;
+          if (
+            !circuit ||
+            wsn(
+              circLines(circuit, S.style)
+                .map(x => x.s)
+                .join('\n')
+            ) !== wsn(tz[0])
+          ) {
+            const pr = parseCircuit(tz[0]);
+            if (!pr.data) throw new Error(pr.warn.join(' ') || 'Kunne ikke tolke CircuiTikZ-koden');
+            circuit = pr.data;
+          }
+          return { ...o, circuit, caption: cap(), label: lab() || o.label, span };
+        }
+        const ig = r.text.match(/\\includegraphics(?:\[([^\]]*)\])?\{(?:bilder\/)?([^}]*)\}/);
+        if (ig) {
+          let o = take('img', b => b.file === ig[2]);
+          if (!o || o.file !== ig[2]) {
+            const lf = (doc.files || []).find(x => x.file === ig[2]);
+            if (!lf)
+              throw new Error('Bildet «' + ig[2] + '» finnes ikke i bilder/. Slipp det i fillisten til venstre først.');
+            o = {
+              id: uid(),
+              type: 'img',
+              src: lf.src,
+              file: lf.file,
+              w: 0.8,
+              label: 'fig:' + slug(lf.file.replace(/\.[^.]+$/, ''))
+            };
+          }
+          const w = (ig[1] || '').match(/width=([0-9.]*)\\(?:line|text)width/);
+          return {
+            ...o,
+            caption: cap(),
+            label: lab() || o.label,
+            span,
+            w: w ? (w[1] === '' ? 1 : Math.max(0.1, Math.min(1, parseFloat(w[1])))) : o.w
+          };
+        }
+        throw new Error('Figuren må inneholde circuitikz eller \\includegraphics');
+      }
+      if (r.env === 'table') {
+        const o = take('table') || { id: uid(), type: 'table', label: 'tab:' + uid().slice(0, 4) };
+        const rows = r.text
+          .split('\n')
+          .filter(l => l.includes('&'))
+          .map(l => {
+            const c = l
+              .replace(/\\\\.*$/, '')
+              .split('&')
+              .map(cellBack);
+            while (c.length < 3) c.push('');
+            return c.slice(0, 3);
+          });
+        if (!rows.length) throw new Error('Fant ingen tabellrader (kolonner skilles med &).');
+        return {
+          ...o,
+          caption: cap(),
+          label: lab() || o.label,
+          rows,
+          style: /\\toprule/.test(r.text) ? 'booktabs' : /\\hline/.test(r.text) ? 'grid' : 'plain'
+        };
+      }
+      if (r.env === 'itemize') {
+        const o = take('table', b => b.style === 'list') || {
+          id: uid(),
+          type: 'table',
+          label: 'tab:' + uid().slice(0, 4),
+          caption: 'Liste',
+          rows: [['Antall', 'Komponent', 'Merknad']]
+        };
+        const items = (r.text.match(/\\item\s+.*/g) || []).map(x => {
+          let s = cellBack(x.replace(/^\\item\s+/, '')),
+            c = '';
+          const pm = s.match(/^(.*?)\s*\(([^()]*)\)$/);
+          if (pm) {
+            s = pm[1];
+            c = pm[2];
+          }
+          const nm = s.match(/^(\d+\s*(?:stk\.)?)\s+(.*)$/);
+          return nm ? [nm[1], nm[2], c] : ['', s, c];
+        });
+        return { ...o, style: 'list', rows: [o.rows[0], ...items] };
+      }
+    } catch (e) {
+      E(r.line, e.msg || e.message || String(e));
+    }
+  });
+  return { title, authors, group, pre, blocks, settings };
+}
+const escH = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+function texLabels(code) {
+  const map = {},
+    sec = [0, 0, 0];
+  let fig = 0,
+    tab = 0,
+    eq = 0,
+    last = null,
+    env = [];
+  const re = /\\begin\{([^}]*)\}|\\end\{([^}]*)\}|\\captionof\{(figure|table)\}|\\caption\{|\\label\{([^}]*)\}/g;
+  let m;
+  while ((m = re.exec(code))) {
+    if (m[1]) {
+      env.push(m[1]);
+      if (/^equation$/.test(m[1])) {
+        eq++;
+        last = { k: 'likning', n: eq };
+      }
+    } else if (m[2]) {
+      env.pop();
+    } else if (m[3]) {
+      if (m[3] === 'figure') {
+        fig++;
+        last = { k: 'figur', n: fig };
+      } else {
+        tab++;
+        last = { k: 'tabell', n: tab };
+      }
+    } else if (m[0] === '\\caption{') {
+      const e = env
+        .slice()
+        .reverse()
+        .find(x => /^(table|figure)\*?$/.test(x));
+      if (e && /^figure/.test(e)) {
+        fig++;
+        last = { k: 'figur', n: fig };
+      } else {
+        tab++;
+        last = { k: 'tabell', n: tab };
+      }
+    } else if (m[4] != null && last) map[m[4]] = last;
+  }
+  return map;
+}
+function texMacros(lines) {
+  const M = {};
+  (lines || []).forEach(l => {
+    const m = l.match(/^\s*\\(?:re)?newcommand\*?\{?\\([A-Za-z]+)\}?(?:\[(\d)\])?\{(.*)\}\s*$/);
+    if (m) M['\\' + m[1]] = m[3];
+  });
+  return M;
+}
+function readGroup(s, i) {
+  let j = i;
+  while (j < s.length && /\s/.test(s[j])) j++;
+  if (s[j] !== '{') return null;
+  let d = 0;
+  for (let k = j; k < s.length; k++) {
+    const c = s[k];
+    if (c === '\\') {
+      k++;
+      continue;
+    }
+    if (c === '{') d++;
+    else if (c === '}') {
+      d--;
+      if (d === 0) return [s.slice(j + 1, k), k + 1];
+    }
+  }
+  return [s.slice(j + 1), s.length];
+}
+function readOpt(s, i) {
+  let j = i;
+  while (j < s.length && /[ \t]/.test(s[j])) j++;
+  if (s[j] !== '[') return null;
+  let d = 0;
+  for (let k = j; k < s.length; k++) {
+    if (s[k] === '[') d++;
+    else if (s[k] === ']') {
+      d--;
+      if (d === 0) return [s.slice(j + 1, k), k + 1];
+    }
+  }
+  return null;
+}
+function findEnd(s, i, env) {
+  const b = '\\begin{' + env + '}',
+    e = '\\end{' + env + '}';
+  let d = 1,
+    k = i;
+  while (k < s.length) {
+    const nb = s.indexOf(b, k),
+      ne = s.indexOf(e, k);
+    if (ne < 0) return [s.slice(i), s.length];
+    if (nb >= 0 && nb < ne) {
+      d++;
+      k = nb + b.length;
+    } else {
+      d--;
+      if (d === 0) return [s.slice(i, ne), ne + e.length];
+      k = ne + e.length;
+    }
+  }
+  return [s.slice(i), s.length];
+}
+const tx_splitTop = (s, sep) => {
+  const out = [];
+  let d = 0,
+    st = 0;
+  for (let k = 0; k < s.length; k++) {
+    const c = s[k];
+    if (c === '\\' && s.slice(k, k + sep.length) !== sep) {
+      k++;
+      continue;
+    }
+    if (c === '{') d++;
+    else if (c === '}') d--;
+    else if (d === 0 && s.slice(k, k + sep.length) === sep) {
+      out.push(s.slice(st, k));
+      st = k + sep.length;
+      k += sep.length - 1;
+    }
+  }
+  out.push(s.slice(st));
+  return out;
+};
+const SI_UNIT = u => {
+  let o = u.trim();
+  PFX.forEach(p => {
+    if (p.c) o = o.split(p.c).join(p.s);
+  });
+  UNITS.forEach(x => {
+    o = o.split(x.c).join(x.s);
+  });
+  return o
+    .replace(/\\per/g, '/')
+    .replace(/\\squared/g, '²')
+    .replace(/\\cubed/g, '³')
+    .replace(/\\[a-zA-Z]+/g, '')
+    .replace(/[{}]/g, '');
+};
+const DROP =
+  /^(label|vspace|hspace|setlength|markcell|addtolength|newcommand|renewcommand|def|usetikzlibrary|ctikzset|tikzset|sisetup|pagestyle|thispagestyle|bibliographystyle|columnbreak|newpage|clearpage|FloatBarrier|centering|noindent|small|footnotesize|scriptsize|tiny|large|Large|normalsize|hfill|vfill|medskip|bigskip|smallskip|raggedright|maketitle|par|indent|selectfont|hline|toprule|midrule|bottomrule|cline|cmidrule)$/;
+function texRender(src, ctx) {
+  const k = window.katex;
+  const km = (t, d) => {
+    t = t.replace(/\\label\{[^}]*\}/g, '').replace(/\\(nonumber|notag)\b/g, '');
+    if (!k) return '<code>' + escH(t) + '</code>';
+    try {
+      return k.renderToString(t, { displayMode: d, throwOnError: false, macros: { ...MACROS, ...(ctx.macros || {}) } });
+    } catch (e) {
+      return escH(t);
+    }
+  };
+  const ref = l => {
+    const x = (ctx.labels || {})[l];
+    return (
+      '<span style="color:inherit">' +
+      (x ? (x.k === 'likning' ? 'likning (' + x.n + ')' : x.k + ' ' + x.n) : '??') +
+      '</span>'
+    );
+  };
+  const cap = (kind, body) => {
+    const x = ctx.cap || {};
+    ctx.capN = ctx.capN || {};
+    ctx.capN[kind] = (ctx.capN[kind] || 0) + 1;
+    return (
+      '<div style="text-align:center;margin:.35em 0 .5em;font-size:.95em">' +
+      (kind === 'figure' ? 'Figur ' : 'Tabell ') +
+      ctx.capN[kind] +
+      ': ' +
+      R(body) +
+      '</div>'
+    );
+  };
+  const heading = (lvl, star, body) => {
+    let num = '';
+    if (!star) {
+      if (lvl === 1) {
+        ctx.sec = (ctx.sec || 0) + 1;
+        ctx.sub = 0;
+        ctx.ssub = 0;
+        num = ctx.sec + '';
+      } else if (lvl === 2) {
+        ctx.sub = (ctx.sub || 0) + 1;
+        ctx.ssub = 0;
+        num = (ctx.sec || 0) + '.' + ctx.sub;
+      } else {
+        ctx.ssub = (ctx.ssub || 0) + 1;
+        num = (ctx.sec || 0) + '.' + (ctx.sub || 0) + '.' + ctx.ssub;
+      }
+    }
+    const fs = lvl === 1 ? '1.2em' : lvl === 2 ? '1.07em' : '1em';
+    return (
+      '<div style="font-weight:700;font-size:' +
+      fs +
+      ';margin:.7em 0 .3em;break-after:avoid">' +
+      (num ? num + '\u2003' : '') +
+      R(body) +
+      '</div>'
+    );
+  };
+  const table = (spec, body) => {
+    const rows = [];
+    tx_splitTop(body, '\\\\').forEach(ch => {
+      let t = ch.trim();
+      const top = /^(\s*\\(toprule|midrule|hline|cline\{[^}]*\}|cmidrule(\([^)]*\))?\{[^}]*\})\s*)+/.exec(t);
+      let rule = '';
+      if (top) {
+        rule = /toprule/.test(top[0]) ? '1px' : '.6px';
+        t = t.slice(top[0].length).trim();
+      }
+      const bot = /\\(bottomrule|hline)\s*$/.test(t);
+      t = t.replace(/\\(bottomrule|hline)\s*$/, '').trim();
+      if (!t) {
+        if (rows.length && (rule || bot))
+          rows[rows.length - 1].bottom = bot && /bottomrule/.test(ch) ? '1px' : rule || '.6px';
+        return;
+      }
+      rows.push({ cells: tx_splitTop(t, '&'), top: rule, bottom: bot ? '.6px' : '' });
+    });
+    return (
+      '<table style="border-collapse:collapse;margin:.3em auto;font-size:.95em">' +
+      rows
+        .map(
+          r =>
+            '<tr style="' +
+            (r.top ? 'border-top:' + r.top + ' solid currentColor;' : '') +
+            (r.bottom ? 'border-bottom:' + r.bottom + ' solid currentColor' : '') +
+            '">' +
+            r.cells.map(c => '<td style="padding:.12em .55em;text-align:center">' + R(c.trim()) + '</td>').join('') +
+            '</tr>'
+        )
+        .join('') +
+      '</table>'
+    );
+  };
+  const envR = (env, body, args) => {
+    const e = env.replace(/\*$/, '');
+    if (/^(equation|align|gather|multline|flalign|alignat|eqnarray|displaymath|math)$/.test(e)) {
+      let num = '';
+      if (env === 'equation') {
+        ctx.eq = (ctx.eq || 0) + 1;
+        num = ctx.eq;
+      }
+      const inner =
+        e === 'equation' || e === 'displaymath'
+          ? body
+          : '\\begin{' +
+            (e === 'eqnarray' ? 'align' : e) +
+            '*}' +
+            body +
+            '\\end{' +
+            (e === 'eqnarray' ? 'align' : e) +
+            '*}';
+      return (
+        '<div style="display:flex;align-items:center;margin:.4em 0;break-inside:avoid"><div style="flex:1;min-width:0;overflow:hidden">' +
+        km(inner, true) +
+        '</div>' +
+        (num ? '<span style="padding-left:.6em">(' + num + ')</span>' : '') +
+        '</div>'
+      );
+    }
+    if (e === 'multicols') {
+      return (
+        '<div style="column-count:' + (args[0] || '2').trim() + ';column-gap:1.4em;margin:.2em 0">' + R(body) + '</div>'
+      );
+    }
+    if (e === 'center') return '<div style="text-align:center;margin:.4em 0">' + R(body) + '</div>';
+    if (e === 'flushright') return '<div style="text-align:right">' + R(body) + '</div>';
+    if (e === 'itemize' || e === 'enumerate' || e === 'description') {
+      const tag = e === 'enumerate' ? 'ol' : 'ul';
+      const items = tx_splitTop(body, '\\item').slice(1);
+      return (
+        '<' +
+        tag +
+        ' style="margin:.3em 0;padding-left:1.4em">' +
+        items.map(x => '<li style="margin:.1em 0">' + R(x.replace(/^\s*\[[^\]]*\]/, '').trim()) + '</li>').join('') +
+        '</' +
+        tag +
+        '>'
+      );
+    }
+    if (e === 'tabular' || e === 'tabularx' || e === 'array' || e === 'longtable')
+      return table(args[e === 'tabularx' ? 1 : 0] || '', body);
+    if (e === 'table' || e === 'figure') {
+      const st = ctx.env || [];
+      ctx.env = [...st, e];
+      const o = '<div style="margin:.5em 0;break-inside:avoid">' + R(body) + '</div>';
+      ctx.env = st;
+      return o;
+    }
+    if (/^(tikzpicture|circuitikz|axis|scope)$/.test(e))
+      return (
+        '<div style="margin:.4em auto;max-width:92%;border:1px dashed currentColor;opacity:.55;border-radius:4px;padding:1.3em .6em;text-align:center;font-family:Geist Mono,monospace;font-size:.8em;break-inside:avoid">' +
+        escH(env) +
+        ' · tegnes i ferdig PDF</div>'
+      );
+    if (e === 'abstract')
+      return (
+        '<div style="margin:.3em 1.5em .7em;font-size:.95em"><div style="text-align:center;font-weight:700;margin-bottom:.2em">Sammendrag</div>' +
+        R(body) +
+        '</div>'
+      );
+    if (e === 'minipage')
+      return (
+        '<div style="display:inline-block;vertical-align:top;width:' +
+        (/\\(text|line)width/.test(args[0] || '') ? Math.round((parseFloat(args[0]) || 1) * 100) + '%' : 'auto') +
+        '">' +
+        R(body) +
+        '</div>'
+      );
+    return R(body);
+  };
+  function R(s) {
+    let out = '',
+      i = 0,
+      txt = '';
+    const flush = () => {
+      if (txt) {
+        out += escH(txt)
+          .replace(/---/g, '\u2014')
+          .replace(/--/g, '\u2013')
+          .replace(/~/g, '\u00a0')
+          .replace(/\n\s*\n/g, '<div style="height:.5em"></div>');
+        txt = '';
+      }
+    };
+    while (i < s.length) {
+      const c = s[i];
+      if (c === '%') {
+        const j = s.indexOf('\n', i);
+        i = j < 0 ? s.length : j + 1;
+        continue;
+      }
+      if (c === '$') {
+        flush();
+        if (s[i + 1] === '$') {
+          const j = s.indexOf('$$', i + 2);
+          const t = s.slice(i + 2, j < 0 ? s.length : j);
+          out += '<div style="margin:.4em 0">' + km(t, true) + '</div>';
+          i = j < 0 ? s.length : j + 2;
+          continue;
+        }
+        const j = s.indexOf('$', i + 1);
+        out += km(s.slice(i + 1, j < 0 ? s.length : j), false);
+        i = j < 0 ? s.length : j + 1;
+        continue;
+      }
+      if (c === '{' || c === '}') {
+        if (c === '{') {
+          const g = readGroup(s, i);
+          if (g) {
+            flush();
+            out += R(g[0]);
+            i = g[1];
+            continue;
+          }
+        }
+        i++;
+        continue;
+      }
+      if (c === '&') {
+        txt += ' ';
+        i++;
+        continue;
+      }
+      if (c !== '\\') {
+        txt += c;
+        i++;
+        continue;
+      }
+      const m = s.slice(i + 1).match(/^([A-Za-z]+\*?|.)/);
+      if (!m) {
+        i++;
+        continue;
+      }
+      const name = m[1];
+      let j = i + 1 + name.length;
+      if (name === '[') {
+        const e = s.indexOf('\\]', j);
+        flush();
+        out +=
+          '<div style="margin:.45em 0;break-inside:avoid">' + km(s.slice(j, e < 0 ? s.length : e), true) + '</div>';
+        i = e < 0 ? s.length : e + 2;
+        continue;
+      }
+      if (name === '(') {
+        const e = s.indexOf('\\)', j);
+        flush();
+        out += km(s.slice(j, e < 0 ? s.length : e), false);
+        i = e < 0 ? s.length : e + 2;
+        continue;
+      }
+      if (name === '\\' || name === 'newline') {
+        flush();
+        out += '<br>';
+        const o = readOpt(s, j);
+        i = o ? o[1] : j;
+        continue;
+      }
+      if (name === ' ' || name === '\n') {
+        txt += ' ';
+        i = j;
+        continue;
+      }
+      if (name === ',') {
+        txt += '\u2009';
+        i = j;
+        continue;
+      }
+      if (name === ';' || name === ':' || name === 'quad') {
+        txt += ' ';
+        i = j;
+        continue;
+      }
+      if (/^[%&#_$&{}]$/.test(name)) {
+        txt += name;
+        i = j;
+        continue;
+      }
+      if (name === 'begin') {
+        const g = readGroup(s, j);
+        if (!g) {
+          i = j;
+          continue;
+        }
+        const env = g[0];
+        j = g[1];
+        const args = [];
+        let o = readOpt(s, j);
+        if (o) j = o[1];
+        if (/^(multicols\*?|tabular\*?|tabularx|array|minipage|longtable)$/.test(env)) {
+          let gg;
+          while ((gg = readGroup(s, j)) && args.length < 2) {
+            args.push(gg[0]);
+            j = gg[1];
+            if (env !== 'tabularx') break;
+          }
+        }
+        const [body, nj] = findEnd(s, j, env);
+        flush();
+        out += envR(env, body, args);
+        i = nj;
+        continue;
+      }
+      if (name === 'end') {
+        const g = readGroup(s, j);
+        i = g ? g[1] : j;
+        continue;
+      }
+      const st = name.replace(/\*$/, '');
+      if (/^(section|subsection|subsubsection|paragraph)$/.test(st)) {
+        const g = readGroup(s, j);
+        flush();
+        if (g) {
+          out +=
+            st === 'paragraph'
+              ? '<b>' + R(g[0]) + '</b> '
+              : heading(st === 'section' ? 1 : st === 'subsection' ? 2 : 3, /\*$/.test(name), g[0]);
+          i = g[1];
+        } else i = j;
+        continue;
+      }
+      if (st === 'SI' || st === 'qty') {
+        const o = readOpt(s, j);
+        if (o) j = o[1];
+        const a = readGroup(s, j),
+          b = a && readGroup(s, a[1]);
+        if (a && b) {
+          txt += a[0].replace('.', ctx.dec || ',') + '\u2009' + SI_UNIT(b[0]);
+          i = b[1];
+        } else i = j;
+        continue;
+      }
+      if (st === 'si' || st === 'unit') {
+        const a = readGroup(s, j);
+        if (a) {
+          txt += SI_UNIT(a[0]);
+          i = a[1];
+        } else i = j;
+        continue;
+      }
+      if (st === 'num') {
+        const a = readGroup(s, j);
+        if (a) {
+          txt += a[0].replace('.', ctx.dec || ',');
+          i = a[1];
+        } else i = j;
+        continue;
+      }
+      if (/^(cref|Cref|ref|eqref|autoref|pageref)$/.test(st)) {
+        const a = readGroup(s, j);
+        flush();
+        if (a) {
+          const r = a[0]
+            .split(',')
+            .map(x => ref(x.trim()))
+            .join(', ');
+          out += st === 'Cref' ? r.replace(/>(\w)/, (m0, c0) => '>' + c0.toUpperCase()) : st === 'eqref' ? r : r;
+          i = a[1];
+        } else i = j;
+        continue;
+      }
+      if (st === 'caption') {
+        const o = readOpt(s, j);
+        if (o) j = o[1];
+        const a = readGroup(s, j);
+        flush();
+        if (a) {
+          const env = (ctx.env || []).slice(-1)[0];
+          out += cap(env === 'figure' ? 'figure' : 'table', a[0]);
+          i = a[1];
+        } else i = j;
+        continue;
+      }
+      if (st === 'captionof') {
+        const t = readGroup(s, j),
+          a = t && readGroup(s, t[1]);
+        flush();
+        if (a) {
+          out += cap(t[0].trim() === 'figure' ? 'figure' : 'table', a[0]);
+          i = a[1];
+        } else i = j;
+        continue;
+      }
+      if (st === 'includegraphics') {
+        const o = readOpt(s, j);
+        if (o) j = o[1];
+        const a = readGroup(s, j);
+        flush();
+        if (a) {
+          const f = a[0].trim().replace(/^bilder\//, ''),
+            src = (ctx.files || {})[f],
+            w = o && o[0].match(/width=([0-9.]*)\\(?:text|line)width/);
+          const pct = w ? Math.round(parseFloat(w[1] || '1') * 100) : 80;
+          out += src
+            ? '<img src="' + src + '" style="display:block;margin:.3em auto;max-width:' + pct + '%;width:' + pct + '%">'
+            : '<div style="margin:.3em auto;width:' +
+              pct +
+              '%;aspect-ratio:16/9;border:1px dashed #b3261e;color:#b3261e;display:flex;align-items:center;justify-content:center;font-size:.8em;text-align:center;padding:.4em">Mangler bilder/' +
+              escH(f) +
+              '</div>';
+          i = a[1];
+        } else i = j;
+        continue;
+      }
+      if (/^(textbf|textit|emph|underline|texttt|textsc|textrm|textsf|mbox|text|fbox)$/.test(st)) {
+        const a = readGroup(s, j);
+        flush();
+        if (a) {
+          const tg = {
+            textbf: ['<b>', '</b>'],
+            textit: ['<i>', '</i>'],
+            emph: ['<i>', '</i>'],
+            underline: ['<u>', '</u>'],
+            texttt: ['<code>', '</code>'],
+            fbox: ['<span style="border:.5px solid currentColor;padding:0 .2em">', '</span>']
+          }[st] || ['', ''];
+          out += tg[0] + R(a[0]) + tg[1];
+          i = a[1];
+        } else i = j;
+        continue;
+      }
+      if (st === 'resizebox' || st === 'scalebox') {
+        let a = readGroup(s, j);
+        if (st === 'resizebox' && a) a = readGroup(s, a[1]);
+        const b = a && readGroup(s, a[1]);
+        flush();
+        if (b) {
+          out += R(b[0]);
+          i = b[1];
+        } else i = j;
+        continue;
+      }
+      if (st === 'color' || st === 'textcolor') {
+        const a = readGroup(s, j);
+        if (st === 'textcolor' && a) {
+          const b = readGroup(s, a[1]);
+          if (b) {
+            flush();
+            out += R(b[0]);
+            i = b[1];
+            continue;
+          }
+        }
+        i = a ? a[1] : j;
+        continue;
+      }
+      if (st === 'item') {
+        flush();
+        out += '<br>• ';
+        i = j;
+        continue;
+      }
+      if (st === 'today') {
+        txt += new Date().toLocaleDateString('nb-NO');
+        i = j;
+        continue;
+      }
+      if (DROP.test(st)) {
+        let o = readOpt(s, j);
+        if (o) j = o[1];
+        if (
+          /^(label|vspace|hspace|setlength|markcell|addtolength|usetikzlibrary|ctikzset|tikzset|sisetup|pagestyle|thispagestyle|bibliographystyle|cline|cmidrule)$/.test(
+            st
+          )
+        ) {
+          let g = readGroup(s, j);
+          if (g) {
+            j = g[1];
+            if (/^(setlength|addtolength)$/.test(st)) {
+              const g2 = readGroup(s, j);
+              if (g2) j = g2[1];
+            }
+          }
+        } else if (/^(newcommand|renewcommand)$/.test(st)) {
+          const g = readGroup(s, j);
+          if (g) j = g[1];
+          const o2 = readOpt(s, j);
+          if (o2) j = o2[1];
+          const g2 = readGroup(s, j);
+          if (g2) j = g2[1];
+        } else if (st === 'def') {
+          const mm = s.slice(j).match(/^\\[A-Za-z]+/);
+          if (mm) j += mm[0].length;
+          const g = readGroup(s, j);
+          if (g) j = g[1];
+        }
+        i = j;
+        continue;
+      }
+      i = j;
+    }
+    flush();
+    return out;
+  }
+  return '<div style="text-wrap:pretty">' + R(src) + '</div>';
+}
+function rawHtml(src, ctx) {
+  return texRender(src || '', ctx || {});
+}
+const ENV_BUILTIN = new Set(
+  'document abstract itemize enumerate description center flushleft flushright quote quotation verse verbatim figure figure* table table* tabular tabular* minipage equation array eqnarray thebibliography titlepage list trivlist picture'.split(
+    ' '
+  )
+);
+const ENV_PKG = {
+  align: 'amsmath',
+  'align*': 'amsmath',
+  gather: 'amsmath',
+  'gather*': 'amsmath',
+  multline: 'amsmath',
+  'multline*': 'amsmath',
+  flalign: 'amsmath',
+  'flalign*': 'amsmath',
+  alignat: 'amsmath',
+  'alignat*': 'amsmath',
+  split: 'amsmath',
+  aligned: 'amsmath',
+  cases: 'amsmath',
+  matrix: 'amsmath',
+  pmatrix: 'amsmath',
+  bmatrix: 'amsmath',
+  vmatrix: 'amsmath',
+  'equation*': 'amsmath',
+  multicols: 'multicol',
+  'multicols*': 'multicol',
+  tikzpicture: 'tikz',
+  circuitikz: 'circuitikz',
+  axis: 'pgfplots',
+  subfigure: 'subcaption',
+  wrapfigure: 'wrapfig',
+  longtable: 'longtable',
+  tabularx: 'tabularx',
+  lstlisting: 'listings'
+};
+const MATH_ENV = /^(equation|align|gather|multline|flalign|alignat|eqnarray|math|displaymath)\*?$/,
+  AMP_ENV =
+    /^(tabular\*?|tabularx|longtable|array|align\*?|alignat\*?|flalign\*?|eqnarray|split|aligned|cases|[pbvV]?matrix)$/;
+function lintTex(src, files) {
+  const D = [],
+    seen = new Set(),
+    add = (line, sev, msg, hint) => {
+      const k = line + '|' + msg;
+      if (seen.has(k) || D.length >= 200) return;
+      seen.add(k);
+      D.push({ line, sev, msg, hint: hint || '' });
+    },
+    nl = s => {
+      ln += (s.match(/\n/g) || []).length;
+    },
+    inTikz = () => envs.some(e => /^(tikzpicture|circuitikz|axis|scope)$/.test(e.env));
+  const pk = new Set(),
+    defs = new Set();
+  src.replace(/\\usepackage(?:\[[^\]]*\])?\{([^}]*)\}/g, (m, a) => {
+    a.split(',').forEach(x => pk.add(x.trim()));
+    return m;
+  });
+  src.replace(/\\newenvironment\{([^}]*)\}/g, (m, a) => {
+    defs.add(a);
+    return m;
+  });
+  if (!/\\begin\{document\}/.test(src))
+    add(1, 'error', 'LaTeX Error: Missing \\begin{document}.', 'Dokumentet må ha \\begin{document} etter preambelen.');
+  let math = null,
+    inDoc = false,
+    ln = 1;
+  const braces = [],
+    envs = [],
+    labels = {},
+    refs = [];
+  const lineStart = [0];
+  for (let i = 0; i < src.length; i++) {
+    const c = src[i];
+    if (c === '\n') {
+      ln++;
+      const nl = src.indexOf('\n', i + 1),
+        cur = src.slice(i + 1, nl < 0 ? src.length : nl);
+      if (!cur.trim() && math && (math.kind === '$' || math.kind === '\\(')) {
+        add(
+          math.line,
+          'error',
+          'Missing $ inserted.',
+          'Inline-matte som starter her, er ikke lukket før avsnittet slutter.'
+        );
+        math = null;
+      }
+      continue;
+    }
+    if (c === '%') {
+      const j = src.indexOf('\n', i);
+      if (j < 0) break;
+      i = j - 1;
+      continue;
+    }
+    if (c === '\\') {
+      const m = src.slice(i + 1, i + 40).match(/^([A-Za-z]+\*?|[\s\S])/);
+      if (!m) continue;
+      const name = m[1];
+      i += name.length;
+      if (name === '\n') {
+        ln++;
+        continue;
+      }
+      const rest = () => src.slice(i + 1, i + 400);
+      if (name === 'begin' || name === 'end') {
+        const em = rest().match(/^\s*\{([^}]*)\}/);
+        if (!em) continue;
+        const env = em[1];
+        i += em[0].length;
+        nl(em[0]);
+        if (name === 'begin') {
+          if (env === 'document') inDoc = true;
+          if (!ENV_BUILTIN.has(env) && !defs.has(env)) {
+            const p = ENV_PKG[env];
+            if (p === undefined)
+              add(
+                ln,
+                'error',
+                'LaTeX Error: Environment ' + env + ' undefined.',
+                'Miljøet «' + env + '» finnes ikke. Sjekk stavemåten, eller legg til pakken som definerer det.'
+              );
+            else if (!pk.has(p))
+              add(
+                ln,
+                'error',
+                'LaTeX Error: Environment ' + env + ' undefined.',
+                'Legg til \\usepackage{' + p + '} i preambelen.'
+              );
+          }
+          envs.push({ env, line: ln });
+          if (MATH_ENV.test(env) && !math) math = { kind: 'env', env, line: ln };
+        } else {
+          const top = envs[envs.length - 1];
+          if (!top)
+            add(
+              ln,
+              'error',
+              'LaTeX Error: \\end{' + env + '} without matching \\begin.',
+              'Det finnes ingen åpen \\begin{' + env + '} her.'
+            );
+          else if (top.env !== env) {
+            add(
+              ln,
+              'error',
+              'LaTeX Error: \\begin{' + top.env + '} on input line ' + top.line + ' ended by \\end{' + env + '}.',
+              '«' + top.env + '» fra linje ' + top.line + ' må lukkes før «' + env + '».'
+            );
+            const k = envs.map(e => e.env).lastIndexOf(env);
+            if (k >= 0) envs.length = k;
+          } else envs.pop();
+          if (math && math.kind === 'env' && math.env === env) math = null;
+        }
+        continue;
+      }
+      if (name === '[') {
+        if (math)
+          add(
+            ln,
+            'error',
+            'LaTeX Error: Bad math environment delimiter.',
+            '\\[ står inne i matte som allerede er åpen.'
+          );
+        else math = { kind: '\\[', line: ln };
+        continue;
+      }
+      if (name === ']') {
+        if (!math || math.kind !== '\\[')
+          add(ln, 'error', 'LaTeX Error: Bad math environment delimiter.', '\\] uten tilhørende \\[.');
+        else math = null;
+        continue;
+      }
+      if (name === '(') {
+        if (!math) math = { kind: '\\(', line: ln };
+        continue;
+      }
+      if (name === ')') {
+        if (math && math.kind === '\\(') math = null;
+        else add(ln, 'error', 'LaTeX Error: Bad math environment delimiter.', '\\) uten tilhørende \\(.');
+        continue;
+      }
+      if (
+        /^(label|ref|cref|Cref|eqref|autoref|pageref|includegraphics|usepackage|documentclass|url|input|include|bibliography|newenvironment)$/.test(
+          name
+        )
+      ) {
+        const am = rest().match(/^\s*(\[[^\]]*\])?\s*\{([^}]*)\}/);
+        if (!am) continue;
+        const ln0 = ln;
+        i += am[0].length;
+        nl(am[0]);
+        const arg = am[2].trim();
+        if (name === 'label') {
+          if (labels[arg])
+            add(
+              ln0,
+              'warning',
+              'LaTeX Warning: Label `' + arg + "' multiply defined.",
+              'Samme \\label brukes også på linje ' + labels[arg] + '.'
+            );
+          else labels[arg] = ln0;
+        } else if (/ref$/i.test(name)) arg.split(',').forEach(k => refs.push({ k: k.trim(), line: ln0 }));
+        else if (name === 'includegraphics' && files && inDoc) {
+          const f = arg.replace(/^bilder\//, '');
+          if (!files.has(f)) {
+            add(
+              ln0,
+              'error',
+              'LaTeX Error: File `' + arg + "' not found.",
+              'Bildet finnes ikke i bilder/. Last det opp, så får det riktig filnavn automatisk.'
+            );
+            D[D.length - 1].fix = { label: 'Last opp bildet …', upload: f };
+          }
+        }
+        continue;
+      }
+      continue;
+    }
+    if (c === '$') {
+      if (src[i + 1] === '$') {
+        i++;
+        if (math && math.kind === '$$') math = null;
+        else if (!math) math = { kind: '$$', line: ln };
+        else add(ln, 'error', 'Display math should end with $$.', '');
+        continue;
+      }
+      if (math && math.kind === '$') math = null;
+      else if (!math) math = { kind: '$', line: ln };
+      else add(ln, 'error', 'LaTeX Error: Bad math environment delimiter.', '$ står inne i display-matte.');
+      continue;
+    }
+    if (c === '{') {
+      braces.push(ln);
+      continue;
+    }
+    if (c === '}') {
+      if (!braces.length) add(ln, 'error', "Too many }'s.", 'Det er en } for mye på denne linjen.');
+      else braces.pop();
+      continue;
+    }
+    if (!inDoc) continue;
+    if ((c === '_' || c === '^') && !math && !inTikz()) {
+      add(
+        ln,
+        'error',
+        'Missing $ inserted.',
+        '«' +
+          c +
+          '» virker bare i matte. Skriv $…$ rundt, eller \\' +
+          (c === '_' ? '_' : 'textasciicircum{}') +
+          ' for selve tegnet.'
+      );
+      continue;
+    }
+    if (c === '&' && !inTikz() && !envs.some(e => AMP_ENV.test(e.env))) {
+      add(
+        ln,
+        'error',
+        'Misplaced alignment tab character &.',
+        '& brukes bare i tabeller og align. Skriv \\& for selve tegnet.'
+      );
+      continue;
+    }
+    if (
+      c === '#' &&
+      !inTikz() &&
+      !/\\(newcommand|renewcommand|def|newenvironment)/.test(src.slice(src.lastIndexOf('\n', i) + 1, i))
+    ) {
+      add(
+        ln,
+        'error',
+        "You can't use `macro parameter character #' in horizontal mode.",
+        'Skriv \\# for selve tegnet.'
+      );
+      continue;
+    }
+  }
+  if (math) add(math.line, 'error', 'Missing $ inserted.', 'Matten som starter her, blir aldri lukket.');
+  if (braces.length) {
+    const bl = src.split('\n')[braces[0] - 1] || '',
+      nc = bl.match(/\\(newcommand|renewcommand|def)\s*\{?\\?([A-Za-z]+)/);
+    const SL = src.split('\n');
+    let end = braces[0] - 1;
+    for (let k = braces[0]; k < SL.length; k++) {
+      if (!SL[k].trim() || /^\s*\\(begin|end|section|title|newcommand|renewcommand|def)\b/.test(SL[k])) break;
+      end = k;
+    }
+    add(
+      braces[0],
+      'error',
+      'Runaway argument? File ended while scanning use of {.',
+      nc
+        ? 'Definisjonen av \\' + nc[2] + ' mangler avsluttende }. Den bør lukkes etter linje ' + (end + 1) + '.'
+        : 'En { på denne linjen blir aldri lukket.'
+    );
+    D[D.length - 1].fix = { label: 'Legg til } på linje ' + (end + 1), line: end + 1, append: '}' };
+  }
+  envs.forEach(e =>
+    add(
+      e.line,
+      'error',
+      e.env === 'document'
+        ? '*** (job aborted, no legal \\end found)'
+        : 'LaTeX Error: \\begin{' + e.env + '} on input line ' + e.line + ' ended by \\end{document}.',
+      'Mangler \\end{' + e.env + '}.'
+    )
+  );
+  refs.forEach(r => {
+    if (r.k && !labels[r.k])
+      add(
+        r.line,
+        'warning',
+        'LaTeX Warning: Reference `' + r.k + "' on page 1 undefined.",
+        'Ingen \\label{' + r.k + '} finnes. Vises som ?? i PDF-en.'
+      );
+  });
+  return D.sort((a, b) => a.line - b.line || (a.sev === 'error' ? -1 : 1));
 }
 const ACCOUNTS = [
   { id: 'SK', name: 'Sebastian Kristoffersen', email: 'sebastian@kristo.no', admin: true },
@@ -1675,9 +2912,30 @@ export {
   DUCK_RE,
   TOKEN_RE,
   tokSh,
+  tokSh0,
   unesc,
   parseInline,
   parseBlock,
+  qtyBack,
+  cellBack,
+  wsn,
+  parseDoc,
+  escH,
+  texLabels,
+  texMacros,
+  readGroup,
+  readOpt,
+  findEnd,
+  tx_splitTop,
+  SI_UNIT,
+  DROP,
+  texRender,
+  rawHtml,
+  ENV_BUILTIN,
+  ENV_PKG,
+  MATH_ENV,
+  AMP_ENV,
+  lintTex,
   ACCOUNTS,
   ADMIN_TABS,
   DEF_SMTP,
@@ -1697,4 +2955,3 @@ export {
   parseCircuit,
   autoLayout
 };
-export { parseDocument } from './latex-doc.js';

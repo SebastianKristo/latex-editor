@@ -58,7 +58,7 @@ export function PdfView({ data, zoom, boxes, onPick }: Props) {
         const scale = (PAGE_W * zoom) / sz.w;
         const mine = boxes.filter(b => b.page === i + 1);
         return (
-          <div key={i} data-page={i + 1} style={{ position: 'relative', width: PAGE_W * zoom, height: sz.h * scale, flex: 'none', background: '#fff', boxShadow: '0 4px 20px rgba(0,0,0,.12)', cursor: 'pointer' }}
+          <div key={i} data-page={i + 1} data-paper="1" style={{ position: 'relative', width: PAGE_W * zoom, height: sz.h * scale, flex: 'none', background: '#fff', boxShadow: '0 4px 20px rgba(0,0,0,.12)', cursor: 'pointer' }}
             onClick={e => { const r = (e.currentTarget as HTMLDivElement).getBoundingClientRect(); onPick(i + 1, (e.clientX - r.left) / scale, (e.clientY - r.top) / scale) }}>
             <canvas ref={el => { canvases.current[i] = el }} style={{ width: '100%', height: '100%', display: 'block' }} />
             {mine.map((b, k) => (

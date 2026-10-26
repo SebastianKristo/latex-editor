@@ -9,23 +9,33 @@ import { RANK } from './auth.js';
 
 const MSG_SYNC = 0, MSG_AWARENESS = 1;
 
+// Versjonshistorikken ligger i et eget rom («<dokument>~hist»), så serveren kan nekte
+// vanlige brukere tilgang når administratoren har slått den av.
+export const HIST = '~hist';
+export const baseId = room => (room.endsWith(HIST) ? room.slice(0, -HIST.length) : room);
+
 export function createSync(db, { onComment = () => {}, saveDelay = 800 } = {}) {
   const rooms = new Map();
-
-  function loadRoom(docId) {
-    let r = rooms.get(docId);
-    if (r) return r;
-    const doc = new Y.Doc();
-    const row = db.prepare('SELECT state FROM ydocs WHERE doc_id = ?').get(docId);
+  const loadState = (id, doc) => {
+    const row = db.prepare('SELECT state FROM ydocs WHERE doc_id = ?').get(id);
     if (row) Y.applyUpdate(doc, new Uint8Array(row.state));
-    else {
+    return !!row;
+  };
+
+  function loadRoom(roomId) {
+    let r = rooms.get(roomId);
+    if (r) return r;
+    const docId = baseId(roomId), isHist = roomId !== docId;
+    const doc = new Y.Doc();
+    if (!loadState(roomId, doc) && !isHist) {
       const d = db.prepare('SELECT data FROM documents WHERE id = ?').get(docId);
       if (d) applyDocToY(doc, JSON.parse(d.data), 'init');
     }
     const awareness = new awarenessProtocol.Awareness(doc);
     awareness.setLocalState(null);
-    r = { id: docId, doc, awareness, conns: new Map(), timer: null };
-    rooms.set(docId, r);
+    r = { id: roomId, docId, isHist, doc, awareness, conns: new Map(), timer: null };
+    rooms.set(roomId, r);
+    if (!isHist) moveHistory(r);
 
     doc.on('update', (update, origin) => {
       const enc = encoding.createEncoder();
@@ -35,7 +45,7 @@ export function createSync(db, { onComment = () => {}, saveDelay = 800 } = {}) {
       clearTimeout(r.timer);
       r.timer = setTimeout(() => persist(r), saveDelay);
     });
-    doc.getMap('comments').observe((ev, tx) => {
+    if (!isHist) doc.getMap('comments').observe((ev, tx) => {
       const by = tx.origin && tx.origin.user;
       if (!by) return;
       ev.changes.keys.forEach((ch, key) => { if (ch.action === 'add') onComment(docId, by, doc.getMap('comments').get(key)) });
@@ -54,14 +64,33 @@ export function createSync(db, { onComment = () => {}, saveDelay = 800 } = {}) {
     return r;
   }
 
+  // Dokumenter fra før historikken fikk eget rom: flytt den over.
+  function moveHistory(r) {
+    const old = r.doc.getArray('history');
+    if (!old.length) return;
+    const entries = old.toArray();
+    const h = rooms.get(r.id + HIST);
+    if (h) h.doc.transact(() => h.doc.getArray('history').push(entries), 'init');
+    else {
+      const hd = new Y.Doc();
+      loadState(r.id + HIST, hd);
+      hd.getArray('history').push(entries);
+      saveState(r.id + HIST, hd);
+      hd.destroy();
+    }
+    r.doc.transact(() => old.delete(0, old.length), 'init');
+    saveState(r.id, r.doc);
+  }
+
+  const saveState = (id, doc) => db.prepare('INSERT INTO ydocs (doc_id, state, updated) VALUES (?, ?, ?) ON CONFLICT(doc_id) DO UPDATE SET state = excluded.state, updated = excluded.updated')
+    .run(id, Y.encodeStateAsUpdate(doc), Date.now());
+
   function persist(r) {
     clearTimeout(r.timer); r.timer = null;
     if (r.dead) return;
-    if (!db.prepare('SELECT 1 FROM documents WHERE id = ?').get(r.id)) return;
-    const state = Y.encodeStateAsUpdate(r.doc);
-    db.prepare('INSERT INTO ydocs (doc_id, state, updated) VALUES (?, ?, ?) ON CONFLICT(doc_id) DO UPDATE SET state = excluded.state, updated = excluded.updated')
-      .run(r.id, state, Date.now());
-    if (!isEmptyY(r.doc)) {
+    if (!db.prepare('SELECT 1 FROM documents WHERE id = ?').get(r.docId)) return;
+    saveState(r.id, r.doc);
+    if (!r.isHist && !isEmptyY(r.doc)) {
       const d = docFromY(r.doc, r.id);
       db.prepare('UPDATE documents SET data = ?, title = ?, updated = ? WHERE id = ?').run(JSON.stringify(d), d.title || '', Date.now(), r.id);
     }
@@ -75,6 +104,7 @@ export function createSync(db, { onComment = () => {}, saveDelay = 800 } = {}) {
   // Tomme oppdateringer (f.eks. synk-svar uten nytt innhold) slippes alltid gjennom.
   function allowed(r, update, role) {
     if (RANK[role] >= RANK['Kan redigere']) return true;
+    if (r.isHist) return false;
     const probe = new Y.Doc();
     Y.applyUpdate(probe, Y.encodeStateAsUpdate(r.doc));
     const before = snapshot(probe), cb = JSON.stringify(commentsFromY(probe));
@@ -85,8 +115,8 @@ export function createSync(db, { onComment = () => {}, saveDelay = 800 } = {}) {
   }
   const snapshot = d => JSON.stringify([docFromY(d, ''), d.getArray('history').toArray(), META_KEYS.map(k => d.getMap('meta').get(k))]);
 
-  function handle(ws, docId, user, role) {
-    const r = loadRoom(docId);
+  function handle(ws, roomId, user, role) {
+    const r = loadRoom(roomId);
     const conn = { user, role, clients: new Set() };
     r.conns.set(ws, conn);
     const origin = { user, ws };
@@ -119,7 +149,7 @@ export function createSync(db, { onComment = () => {}, saveDelay = 800 } = {}) {
       const c = r.conns.get(ws);
       r.conns.delete(ws);
       if (c) awarenessProtocol.removeAwarenessStates(r.awareness, [...c.clients], null);
-      if (!r.conns.size && !r.dead) { persist(r); r.doc.destroy(); rooms.delete(docId) }
+      if (!r.conns.size && !r.dead) { persist(r); r.doc.destroy(); rooms.delete(roomId) }
     });
 
     const enc = encoding.createEncoder();
@@ -170,5 +200,10 @@ export function createSync(db, { onComment = () => {}, saveDelay = 800 } = {}) {
   }
   function flushAll() { for (const r of rooms.values()) persist(r) }
 
-  return { handle, readDoc, readComments, reset, flushAll, rooms };
+  // Når administratoren skrur av historikk for andre: koble fra vanlige brukere i historikkrommene.
+  function closeHistoryFor(test) {
+    for (const r of rooms.values()) if (r.isHist) for (const [ws, c] of r.conns) if (test(c.user)) ws.close(4403, 'Historikk er slått av');
+  }
+
+  return { handle, readDoc, readComments, reset, flushAll, closeHistoryFor, rooms };
 }

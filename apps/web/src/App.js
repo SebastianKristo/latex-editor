@@ -63,9 +63,30 @@ import {
   DUCK_RE,
   TOKEN_RE,
   tokSh,
+  tokSh0,
   unesc,
   parseInline,
   parseBlock,
+  qtyBack,
+  cellBack,
+  wsn,
+  parseDoc,
+  escH,
+  texLabels,
+  texMacros,
+  readGroup,
+  readOpt,
+  findEnd,
+  tx_splitTop,
+  SI_UNIT,
+  DROP,
+  texRender,
+  rawHtml,
+  ENV_BUILTIN,
+  ENV_PKG,
+  MATH_ENV,
+  AMP_ENV,
+  lintTex,
   ACCOUNTS,
   ADMIN_TABS,
   DEF_SMTP,
@@ -87,8 +108,6 @@ import {
 } from '@kobling/core';
 import { symEls, drawCircuit } from '@kobling/ui';
 import { DCLogic } from './dc-runtime';
-import { CodeEditor } from './CodeEditor';
-import { parseDocument } from '@kobling/core';
 import { openChannel } from './sync';
 import * as GEN from '../../../deploy/generators.js';
 const LSK = 'kobling-demo-v1';
@@ -165,7 +184,7 @@ export default class Component extends DCLogic {
       { id: 'SK', name: 'Sebastian Kristoffersen (deg)', initials: 'SK', color: USERS.SK.color, role: 'Eier' },
       { id: 'MH', name: 'Mia Hansen', initials: 'MH', color: USERS.MH.color, role: 'Kan redigere' },
       { id: 'EL', name: 'Emil Larsen', initials: 'EL', color: USERS.EL.color, role: 'Kan redigere' },
-      { id: 'LA', name: 'Læringsassistent', initials: 'LA', color: '#bdb7ae', role: 'Kan kommentere' }
+      { id: 'LA', name: 'Læringsassistent', initials: 'LA', color: 'var(--kbdb7ae,#bdb7ae)', role: 'Kan kommentere' }
     ],
     invite: '',
     inviteErr: '',
@@ -283,6 +302,11 @@ export default class Component extends DCLogic {
   rootRef = React.createRef();
   fileRef = React.createRef();
   componentDidMount() {
+    try {
+      this._mq = window.matchMedia('(prefers-color-scheme: dark)');
+      this._mqf = () => this.forceUpdate();
+      this._mq.addEventListener('change', this._mqf);
+    } catch (e) {}
     this._sel = () => this.onSel();
     document.addEventListener('selectionchange', this._sel);
     this._pst = e => this.onDocPaste(e);
@@ -475,7 +499,7 @@ export default class Component extends DCLogic {
     }
     if (m && e.key === ',') {
       e.preventDefault();
-      this.setState({ view: 'settings' });
+      this.setState({ view: 'settings', profileOpen: false });
       return;
     }
     if (m && e.altKey && k === 'l') {
@@ -484,6 +508,7 @@ export default class Component extends DCLogic {
       return;
     }
     if (e.key === 'Escape') {
+      if (s.profileOpen) return this.setState({ profileOpen: false });
       if (s.fileMenu) return this.setState({ fileMenu: false });
       if (s.picker) return this.setState({ picker: null });
       if (s.share) return this.setState({ share: false });
@@ -527,12 +552,69 @@ export default class Component extends DCLogic {
     clearTimeout(this.ct2);
     this.setState(s => ({ compile: { ...s.compile, status: 'running' } }));
     this.ct2 = setTimeout(() => {
-      this.setState({
-        compile: { status: 'ok', time: (0.5 + Math.random() * 0.5).toFixed(1).replace('.', ',') },
-        pdfSnap: clone(this.curDoc())
-      });
+      const doc = this.curDoc(),
+        text = this.codeTextNow(),
+        lines = text.split('\n'),
+        log = lintTex(text, this.fileSet(doc)).map(d => ({ ...d, code: (lines[d.line - 1] || '').trim() }));
+      const nE = log.filter(d => d.sev === 'error').length,
+        nW = log.length - nE,
+        time = (0.5 + Math.random() * 0.5).toFixed(1).replace('.', ',');
+      if (nE) this.setState({ compile: { status: 'error', time, log, nE, nW } });
+      else this.setState({ compile: { status: 'ok', time, log, nE, nW }, pdfSnap: clone(doc) });
     }, 650);
   };
+  applyFix(d) {
+    const f = d.fix;
+    if (!f) return;
+    if (f.upload) {
+      this.pickImage({ library: true, name: f.upload });
+      return;
+    }
+    const ls = this.codeTextNow().split('\n');
+    if (f.line > ls.length) return;
+    ls[f.line - 1] = ls[f.line - 1].replace(/\s*$/, '') + f.append;
+    const text = ls.join('\n');
+    this._cdDirty = false;
+    this.setState({ codeDraft: text, codeDraftFor: this.state.cur }, () => {
+      this.applyDraft(true);
+      this.toast(f.label.replace('Legg til', 'La til'));
+      setTimeout(() => this.compile(), 50);
+    });
+  }
+  codeTextNow() {
+    const s = this.state;
+    return s.codeDraft != null && s.codeDraftFor === s.cur
+      ? s.codeDraft
+      : docCode(this.curDoc(), s.settings)
+          .map(l => l.s)
+          .join('\n');
+  }
+  fileSet(doc) {
+    return new Set([
+      ...(doc.files || []).map(f => f.file),
+      ...doc.blocks.filter(b => b.type === 'img').map(b => b.file)
+    ]);
+  }
+  codeRef = React.createRef();
+  goToLine(n) {
+    this.setState(
+      x => ({ mode: x.mode === 'visual' ? 'split' : x.mode, view: 'editor' }),
+      () =>
+        setTimeout(() => {
+          const el = this.codeRef.current;
+          if (!el) return;
+          el.scrollTop = Math.max(0, (n - 1) * 21.25 - el.clientHeight / 3);
+          const ta = el.querySelector('textarea');
+          if (ta) {
+            const ls = ta.value.split('\n');
+            let p = 0;
+            for (let k = 0; k < n - 1 && k < ls.length; k++) p += ls[k].length + 1;
+            ta.focus({ preventScroll: true });
+            ta.setSelectionRange(p, p + (ls[n - 1] || '').length);
+          }
+        }, 30)
+    );
+  }
   setDoc(fn, hist) {
     this.setState(
       s => {
@@ -989,23 +1071,6 @@ export default class Component extends DCLogic {
     );
     this.toast('Gjenopprettet fra ' + k.name);
   }
-  // Hele main.tex redigert i kodevisningen: les inn igjen som blokker (ukjent LaTeX beholdes ordrett).
-  applyFullCode = text => {
-    const doc = this.curDoc();
-    let r;
-    try {
-      r = parseDocument(text, { S: this.state.settings, prev: doc });
-    } catch (e) {
-      this.setState({ codeErr: e.message });
-      return false;
-    }
-    const next = { ...doc, ...r };
-    if (this.state.codeErr) this.setState({ codeErr: '' });
-    if (JSON.stringify(next) === JSON.stringify(doc)) return true;
-    this.setDoc(() => next, this._codeHist ? null : 'Redigerte LaTeX-koden');
-    this._codeHist = true;
-    return true;
-  };
   openCodeEdit = () => {
     const b = this.findBlock(this.state.active);
     if (!b) return;
@@ -1013,6 +1078,63 @@ export default class Component extends DCLogic {
       .filter(l => l.bid === b.id)
       .map(l => l.s);
     this.setState({ codeEdit: { bid: b.id, text: lines.join('\n'), err: '' } });
+  };
+  onCodeInput = e => {
+    const text = e.target.value;
+    this._cdDirty = true;
+    this.setState({ codeDraft: text, codeDraftFor: this.state.cur });
+    clearTimeout(this._cdt);
+    this._cdt = setTimeout(() => this.applyDraft(false), 600);
+  };
+  applyDraft(final) {
+    const s = this.state,
+      text = s.codeDraft;
+    if (text == null || s.codeDraftFor !== s.cur) return;
+    let r;
+    try {
+      r = parseDoc(text, this.curDoc(), s.settings);
+    } catch (e) {
+      this.setState({ codeErr: { line: e.line || 0, msg: e.msg || e.message || String(e) } }, () => this.schedule());
+      return;
+    }
+    this.setDoc(
+      d => ({ ...d, title: r.title, authors: r.authors, group: r.group, pre: r.pre, blocks: r.blocks }),
+      final ? 'Redigerte LaTeX-koden' : null
+    );
+    const chg = Object.keys(r.settings).some(k => r.settings[k] !== s.settings[k]);
+    this.setState(
+      x => ({
+        codeErr: null,
+        settings: chg ? { ...x.settings, ...r.settings } : x.settings,
+        ...(final ? { codeDraft: null } : {})
+      }),
+      () => this.schedule()
+    );
+  }
+  onCodeBlur = () => {
+    clearTimeout(this._cdt);
+    if (this._cdDirty) {
+      this._cdDirty = false;
+      this.applyDraft(true);
+    } else if (!this.state.codeErr) this.setState({ codeDraft: null });
+  };
+  onCodeKey = e => {
+    const ta = e.target;
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      ta.setRangeText('  ', ta.selectionStart, ta.selectionEnd, 'end');
+      this.onCodeInput({ target: ta });
+    } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') {
+      clearTimeout(this._cdt);
+      this.applyDraft(false);
+    }
+  };
+  onCodeCaret = e => {
+    if (this.state.codeDraft != null) return;
+    const ta = e.target,
+      ln = ta.value.slice(0, ta.selectionStart).split('\n').length - 1,
+      l = docCode(this.curDoc(), this.state.settings)[ln];
+    if (l && l.bid && l.bid !== this.state.active) this.focusBlock(l.bid, 'code');
   };
   applyCodeEdit = () => {
     const ce = this.state.codeEdit,
@@ -1119,6 +1241,99 @@ export default class Component extends DCLogic {
     this.activeSrc = 'editor-new';
     this.setState({ active: id });
   }
+  async addToLib(files, forceName) {
+    const recs = [];
+    for (const f of files) {
+      try {
+        recs.push(await readImg(f));
+      } catch (e) {
+        this.toast('Kunne ikke lese ' + f.name);
+      }
+    }
+    if (!recs.length) return;
+    this.setDoc(
+      d => {
+        const used = new Set([
+          ...(d.files || []).map(x => x.file),
+          ...d.blocks.filter(b => b.type === 'img').map(b => b.file)
+        ]);
+        const add = recs.map((m, ri) => {
+          if (forceName && ri === 0) {
+            used.add(forceName);
+            return { id: uid(), file: forceName, src: m.src, cap: m.cap };
+          }
+          let n = m.file,
+            k = 2;
+          while (used.has(n)) {
+            n = m.file.replace(/(\.[^.]+)?$/, '-' + k + '$1');
+            k++;
+          }
+          used.add(n);
+          return { id: uid(), file: n, src: m.src, cap: m.cap };
+        });
+        return { ...d, files: [...(d.files || []), ...add] };
+      },
+      recs.length > 1 ? 'Lastet opp ' + recs.length + ' bilder' : 'Lastet opp bilder/' + recs[0].file
+    );
+    this.toast(
+      forceName
+        ? 'Lastet opp som bilder/' + forceName
+        : recs.length > 1
+          ? recs.length + ' bilder lastet opp til bilder/'
+          : 'Lastet opp til bilder/ · dra det inn i dokumentet'
+    );
+    if (forceName) setTimeout(() => this.compile(), 80);
+  }
+  insertLib(fid, afterId) {
+    const d = this.curDoc(),
+      f = (d.files || []).find(x => x.id === fid);
+    if (!f) return;
+    const bs0 = d.blocks;
+    if (afterId == null) afterId = this.state.active || (bs0.length ? bs0[bs0.length - 1].id : '__start');
+    const cap = (f.cap || f.file.replace(/\.[^.]+$/, '')).replace(/[-_]+/g, ' ');
+    const blk = {
+      id: uid(),
+      type: 'img',
+      src: f.src,
+      file: f.file,
+      w: 0.8,
+      span: false,
+      caption: cap.charAt(0).toUpperCase() + cap.slice(1) + '.',
+      label: 'fig:' + slug(f.file.replace(/\.[^.]+$/, ''))
+    };
+    this.setBlocks(bs => {
+      let at;
+      if (afterId === '__start') at = 0;
+      else {
+        const i = bs.findIndex(x => x.id === afterId);
+        at = i < 0 ? bs.length : i + 1;
+      }
+      return [...bs.slice(0, at), blk, ...bs.slice(at)];
+    }, 'Satte inn bilder/' + f.file);
+    this.activeSrc = 'editor-new';
+    this.setState({ active: blk.id });
+  }
+  sideDragOver = e => {
+    const ty = [...(e.dataTransfer.types || [])];
+    if (!ty.includes('Files')) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+    if (!this.state.sideDrop) this.setState({ sideDrop: true });
+  };
+  sideDragLeave = e => {
+    if (e.currentTarget.contains(e.relatedTarget)) return;
+    this.setState({ sideDrop: false });
+  };
+  sideDrop = e => {
+    e.preventDefault();
+    e.stopPropagation();
+    this.setState({ sideDrop: false });
+    const all = [...(e.dataTransfer.files || [])],
+      files = all.filter(f => f.type.startsWith('image/'));
+    if (!files.length) return this.toast(all.length ? 'Bare bildefiler kan lastes opp her' : 'Ingen filer');
+    if (files.length < all.length) this.toast('Hoppet over filer som ikke er bilder');
+    this.addToLib(files);
+  };
   pickImage(target) {
     this.fileTarget = target;
     const el = this.fileRef.current;
@@ -1132,13 +1347,14 @@ export default class Component extends DCLogic {
     const tg = this.fileTarget || {};
     this.fileTarget = null;
     if (!files.length) return;
+    if (tg.library) return this.addToLib(files, tg.name);
     if (tg.replace) this.replaceImage(tg.replace, files[0]);
     else this.insertImages(files, tg.after);
   };
   edDragOver = e => {
     const ty = [...(e.dataTransfer.types || [])];
     const isF = ty.includes('Files'),
-      isB = ty.includes('application/x-kobling-blk');
+      isB = ty.includes('application/x-kobling-blk') || ty.includes('application/x-kobling-file');
     if (!isF && !isB) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = isF ? 'copy' : 'move';
@@ -1169,6 +1385,8 @@ export default class Component extends DCLogic {
       const i = bs.findIndex(b => b.id === at.bid);
       afterId = at.after ? at.bid : i > 0 ? bs[i - 1].id : '__start';
     }
+    const lf = e.dataTransfer.getData('application/x-kobling-file');
+    if (lf) return this.insertLib(lf, afterId);
     if (files.length) return this.insertImages(files, afterId);
     if ([...(e.dataTransfer.files || [])].length) return this.toast('Bare bildefiler kan slippes her');
     const mv = e.dataTransfer.getData('application/x-kobling-blk');
@@ -1210,10 +1428,12 @@ export default class Component extends DCLogic {
     }
     let r;
     try {
-      r = parseDocument(tx, { S: this.state.settings });
+      // parseDoc leser et helt dokument; et utdrag pakkes inn i \begin{document} … \end{document}.
+      const full = /\\begin\{document\}/.test(tx) ? tx : '\\begin{document}\n' + tx + '\n\\end{document}';
+      r = parseDoc(full, { title: '', authors: '', group: '', blocks: [] }, this.state.settings);
     } catch (err) {
       e.preventDefault();
-      this.toast(err.message);
+      this.toast(err.line ? 'Linje ' + err.line + ': ' + err.msg : err.msg || err.message);
       return true;
     }
     if (!r.blocks.length) return false;
@@ -1224,7 +1444,7 @@ export default class Component extends DCLogic {
         at = i < 0 ? d.blocks.length : i + 1;
       return {
         ...d,
-        preamble: r.preamble ? [d.preamble, r.preamble].filter(Boolean).join('\n') : d.preamble,
+        pre: [...(d.pre || []), ...(r.pre || []).filter(l => !(d.pre || []).includes(l))],
         blocks: [...d.blocks.slice(0, at), ...r.blocks, ...d.blocks.slice(at)]
       };
     }, 'Limte inn LaTeX');
@@ -1423,6 +1643,7 @@ export default class Component extends DCLogic {
       doc = this.curDoc(),
       h = React.createElement,
       dec = S.dec;
+    const themeAttr = S.theme === 'dark' || (S.theme !== 'light' && this._mq && this._mq.matches) ? 'dark' : 'light';
     const isWeb = s.platform === 'web',
       isWin = s.platform === 'win',
       MOD = s.platform === 'mac' || (isWeb && /Mac/.test(navigator.platform)) ? '⌘' : 'Ctrl+';
@@ -1438,6 +1659,7 @@ export default class Component extends DCLogic {
       keep: e => e.preventDefault(),
       stop: e => e.stopPropagation()
     };
+    v.themeAttr = themeAttr;
     v.showDocCrumb = s.view !== 'projects';
     v.crumbRoot = doc.folder.split(' · ')[0] + ' / ' + (doc.folder.split(' · ')[1] || '');
     v.url =
@@ -1449,6 +1671,37 @@ export default class Component extends DCLogic {
           : 'd/' + slug(doc.title) + (s.view === 'circuit' ? '/krets' : ''));
     v.goProjects = () => this.setState({ view: 'projects', share: false, circ: null });
     v.goSettings = () => this.setState({ view: 'settings', share: false });
+    {
+      const me = this.account(),
+        go = tab => () => this.setState({ view: 'settings', setTab: tab, share: false, profileOpen: false });
+      v.meInitials = me.name
+        .split(' ')
+        .map(x => x[0])
+        .slice(0, 2)
+        .join('');
+      v.meColor = me.color || (USERS[me.id] || {}).color || ACC;
+      v.meName = me.name + (me.admin ? ' · admin' : '');
+      v.meEmail = me.email;
+      v.meTitle = me.name + ' · Innstillinger';
+      v.profileOpen = !!s.profileOpen;
+      v.meRing = s.profileOpen ? '0 0 0 3px var(--koklch086006250,oklch(0.86 0.06 250))' : 'none';
+      v.toggleProfile = () => this.setState(x => ({ profileOpen: !x.profileOpen }));
+      v.closeProfile = () => this.setState({ profileOpen: false });
+      const dk = v.themeAttr === 'dark';
+      v.profileItems = [
+        {
+          label: 'Mørk modus',
+          hint: dk ? 'På' : 'Av',
+          onClick: () => {
+            this.setS('theme', dk ? 'light' : 'dark');
+            this.setState({ profileOpen: false });
+          }
+        },
+        { label: 'Innstillinger', hint: MOD + ',', onClick: go(s.setTab || 'mal') },
+        { label: 'Konto', hint: '', onClick: go('konto') },
+        ...(me.admin ? [{ label: 'Server og backup', hint: 'Admin', onClick: go('server') }] : [])
+      ];
+    }
     v.goEditor = () => this.setState({ view: 'editor', circ: null });
     v.docTitle = doc.title;
     v.docAuthors = doc.group ? doc.authors + ' · ' + doc.group : doc.authors;
@@ -1471,18 +1724,42 @@ export default class Component extends DCLogic {
     ].map(([l, k]) => ({
       label: l,
       onClick: () => this.setState({ platform: k }),
-      bg: s.platform === k ? '#fff' : 'transparent',
-      color: s.platform === k ? '#1f1e1c' : '#d9d5ce'
+      bg: s.platform === k ? 'var(--kfff,#fff)' : 'transparent',
+      color: s.platform === k ? 'var(--k1f1e1c,#1f1e1c)' : 'var(--kd9d5ce,#d9d5ce)'
     }));
     const st = s.compile.status;
+    const cw = s.compile.nW || 0,
+      cE = s.compile.nE || 0;
     v.statusText =
       st === 'ok'
-        ? `Kompilert ${s.compile.time} s`
+        ? `Kompilert ${s.compile.time} s` + (cw ? ' · ' + cw + (cw === 1 ? ' advarsel' : ' advarsler') : '')
         : st === 'running'
           ? 'Kompilerer …'
-          : 'Ikke kompilert · ' + MOD + 'S';
-    v.statusColor = st === 'ok' ? '#4d8a5a' : st === 'running' ? 'oklch(0.55 0.12 75)' : '#8d8982';
-    v.compile = this.compile;
+          : st === 'error'
+            ? cE + ' feil · kompilering stoppet'
+            : 'Ikke kompilert · ' + MOD + 'S';
+    v.statusColor =
+      st === 'ok'
+        ? cw
+          ? 'var(--kb26a1e,#b26a1e)'
+          : 'var(--k4d8a5a,#4d8a5a)'
+        : st === 'running'
+          ? 'var(--koklch05501275,oklch(0.55 0.12 75))'
+          : st === 'error'
+            ? 'var(--kb3261e,#b3261e)'
+            : 'var(--k8d8982,#8d8982)';
+    v.statusBg =
+      st === 'ok'
+        ? cw
+          ? 'var(--koklch096003075,oklch(0.96 0.03 75))'
+          : 'var(--koklch096003150,oklch(0.96 0.03 150))'
+        : st === 'error'
+          ? 'var(--koklch09600325,oklch(0.96 0.03 25))'
+          : 'var(--card,#fff)';
+    v.compile = () => {
+      if (st === 'error' || cw) this.setState({ right: 'log', view: 'editor' });
+      this.compile();
+    };
     v.avatars = s.people
       .filter(p => p.id !== 'LA')
       .slice(0, 4)
@@ -1496,9 +1773,9 @@ export default class Component extends DCLogic {
     ].map(([l, k]) => ({
       label: l,
       onClick: () => this.setState({ mode: k }),
-      bg: s.mode === k ? '#fff' : 'transparent',
-      color: s.mode === k ? '#1f1e1c' : '#6b6862',
-      shadow: s.mode === k ? '0 1px 2px rgba(0,0,0,.1)' : 'none'
+      bg: s.mode === k ? 'var(--acc-g,#138a36)' : 'transparent',
+      color: s.mode === k ? '#fff' : 'var(--k6b6862,#6b6862)',
+      shadow: 'none'
     }));
     v.showVisual = s.mode !== 'code';
     v.showCode = s.mode !== 'visual';
@@ -1532,14 +1809,39 @@ export default class Component extends DCLogic {
                 : b.type === 'eq'
                   ? `Likning (${nb.num[b.id]})`
                   : 'Sammendrag';
+    const texCtx0 = () => {
+      const files = {};
+      (doc.files || []).forEach(f => (files[f.file] = f.src));
+      doc.blocks.forEach(x => {
+        if (x.type === 'img') files[x.file] = x.src;
+      });
+      return {
+        labels: texLabels(
+          docCode(doc, S)
+            .map(l => l.s)
+            .join('\n')
+        ),
+        macros: texMacros(doc.pre),
+        files,
+        dec: S.dec
+      };
+    };
+    const edCtx = texCtx0();
     v.blocks = doc.blocks.map(b => {
       const act = s.active === b.id;
+      if (b.type === 'h1') {
+        edCtx.sec = parseInt(nb.num[b.id]) || edCtx.sec;
+        edCtx.sub = 0;
+      }
+      if (b.type === 'h2') {
+        edCtx.sub = parseInt(String(nb.num[b.id]).split('.')[1]) || edCtx.sub;
+      }
       const vm = {
         id: b.id,
         kind: KIND[b.type],
         isActive: act,
         ring: act ? ACCB : 'transparent',
-        bgc: act ? '#fff' : 'transparent',
+        bgc: act ? 'var(--kfff,#fff)' : 'transparent',
         num: nb.num[b.id],
         isAbstract: b.type === 'abstract',
         isH1: b.type === 'h1',
@@ -1630,7 +1932,7 @@ export default class Component extends DCLogic {
             key,
             label: nb.refText(sg.target),
             code: `\\cref{${sg.target}} · klikk for å gå dit`,
-            color: L ? '#3d3a36' : '#b3261e',
+            color: L ? 'var(--k3d3a36,#3d3a36)' : 'var(--kb3261e,#b3261e)',
             onClick: e => {
               e.stopPropagation();
               if (L) this.focusBlock(L.id, 'ref');
@@ -1640,8 +1942,12 @@ export default class Component extends DCLogic {
         vm.showPh = b.segs.every(x => x.t === 'text' && !x.v) && !act;
       }
       if (b.type === 'raw') {
-        vm.src = b.src;
-        vm.rows = Math.min(24, Math.max(2, (b.src || '').split('\n').length));
+        vm.isRaw = true;
+        const em = (b.src || '').match(/^\s*\\begin\{([^}]+)\}/);
+        vm.rawEnv = em ? em[1] : 'LaTeX';
+        vm.rawEl = React.createElement('div', { dangerouslySetInnerHTML: { __html: rawHtml(b.src, edCtx) } });
+        vm.rawSrc = b.src;
+        vm.rawRows = Math.min(16, (b.src || '').split('\n').length + 1);
         vm.onRaw = e => this.updBlock(b.id, { src: e.target.value });
       }
       if (b.type === 'eq') {
@@ -1669,8 +1975,8 @@ export default class Component extends DCLogic {
       if (b.type === 'fig' || b.type === 'img') {
         vm.canSpan = S.cols === 2;
         vm.spanLabel = b.span ? '✓ Over begge spalter' : 'Over begge spalter';
-        vm.spanBg = b.span ? ACCL : '#f3f1ed';
-        vm.spanColor = b.span ? 'oklch(0.42 0.15 250)' : '#3d3a36';
+        vm.spanBg = b.span ? ACCL : 'var(--kf3f1ed,#f3f1ed)';
+        vm.spanColor = b.span ? 'var(--koklch042015250,oklch(0.42 0.15 250))' : 'var(--k3d3a36,#3d3a36)';
         vm.onSpan = e => {
           e.stopPropagation();
           this.updBlock(b.id, { span: !b.span }, b.span ? 'Figur i én spalte' : 'Figur over begge spalter');
@@ -1688,7 +1994,7 @@ export default class Component extends DCLogic {
             e.stopPropagation();
             this.updBlock(b.id, { w }, 'Endret bildebredde');
           },
-          bg: (b.w || 0.8) === w ? '#fff' : 'transparent',
+          bg: (b.w || 0.8) === w ? 'var(--kfff,#fff)' : 'transparent',
           shadow: (b.w || 0.8) === w ? '0 1px 2px rgba(0,0,0,.12)' : 'none'
         }));
         vm.onReplace = e => {
@@ -1703,7 +2009,7 @@ export default class Component extends DCLogic {
       }
       if (b.type === 'table') {
         vm.rows = b.rows.map((r, ri) => ({
-          bg: ri === 0 ? '#f6f4f0' : '#fff',
+          bg: ri === 0 ? 'var(--kf6f4f0,#f6f4f0)' : 'var(--kfff,#fff)',
           fw: ri === 0 ? 600 : 400,
           cells: r.map((c, ci) => ({
             v: c || '\u200B',
@@ -1731,7 +2037,7 @@ export default class Component extends DCLogic {
             e.stopPropagation();
             this.updBlock(b.id, { style: k }, 'Tabellstil: ' + l);
           },
-          bg: st === k ? '#fff' : 'transparent',
+          bg: st === k ? 'var(--kfff,#fff)' : 'transparent',
           shadow: st === k ? '0 1px 2px rgba(0,0,0,.12)' : 'none',
           fw: st === k ? 600 : 400
         }));
@@ -1854,9 +2160,9 @@ export default class Component extends DCLogic {
     ].map(x => ({
       ...x,
       sep: !!x.sep,
-      bg: x.accent ? ACCL : '#fff',
-      border: x.accent ? ACCB : '#e2dfd9',
-      color: x.accent ? 'oklch(0.42 0.15 250)' : '#2f2d2a',
+      bg: x.accent ? ACCL : 'var(--kfff,#fff)',
+      border: x.accent ? ACCB : 'var(--ke2dfd9,#e2dfd9)',
+      color: x.accent ? 'var(--koklch042015250,oklch(0.42 0.15 250))' : 'var(--k2f2d2a,#2f2d2a)',
       fw: x.accent ? 600 : 500
     }));
     v.refMenuOpen = s.refMenu;
@@ -1874,27 +2180,65 @@ export default class Component extends DCLogic {
     v.noRefs = !v.refItems.length;
 
     const code = docCode(doc, S);
-    v.codeEditor = h(CodeEditor, {
-      lines: code,
-      active: s.active,
-      onApply: this.applyFullCode,
-      onLine: bid => {
-        this.activeSrc = 'code';
-        this.setState({ active: bid });
-      },
-      onDone: () => (this._codeHist = false)
+    const draft = s.codeDraft != null && s.codeDraftFor === s.cur ? s.codeDraft : null,
+      cErr = draft != null ? s.codeErr : null;
+    const srcText = draft != null ? draft : code.map(l => l.s).join('\n');
+    if (this._lk !== srcText) {
+      this._lk = srcText;
+      this._lint = lintTex(srcText, this.fileSet(doc));
+    }
+    const dm = {};
+    this._lint.forEach(d => {
+      if (!dm[d.line] || (d.sev === 'error' && dm[d.line].sev !== 'error')) dm[d.line] = d;
     });
-    v.codeErr = s.codeErr || '';
-    v.codeLines = code.map((l, i) => ({
-      n: i + 1,
-      parts: tok(l.s),
-      bg: l.bid && l.bid === s.active ? HL : 'transparent',
-      cursor: l.bid ? 'pointer' : 'default',
-      onClick: () => l.bid && this.focusBlock(l.bid, 'code')
-    }));
+    v.codeLines = (draft != null ? draft.split('\n').map(x => ({ s: x, bid: null })) : code).map((l, i) => {
+      const d = dm[i + 1],
+        er = d && d.sev === 'error';
+      return {
+        n: i + 1,
+        parts: tok(l.s),
+        numColor: d ? (er ? 'var(--kb3261e,#b3261e)' : 'var(--kb26a1e,#b26a1e)') : 'var(--kb5b0a8,#b5b0a8)',
+        numW: d ? 700 : 400,
+        hasMsg: !!d,
+        msg: d ? (er ? '✕ ' : '▲ ') + d.msg : '',
+        msgColor: er ? 'var(--kb3261e,#b3261e)' : 'var(--k9a5f14,#9a5f14)',
+        bg:
+          cErr && cErr.line === i + 1
+            ? 'var(--koklch09500425,oklch(0.95 0.04 25))'
+            : d
+              ? er
+                ? 'var(--koklch097002525,oklch(0.97 0.025 25))'
+                : 'var(--koklch097500380,oklch(0.975 0.03 80))'
+              : l.bid && l.bid === s.active
+                ? HL
+                : 'transparent'
+      };
+    });
+    {
+      const nE = this._lint.filter(d => d.sev === 'error').length,
+        nW = this._lint.length - nE;
+      v.lintSummary =
+        nE || nW
+          ? [nE ? nE + ' feil' : '', nW ? nW + (nW === 1 ? ' advarsel' : ' advarsler') : ''].filter(Boolean).join(' · ')
+          : '';
+      v.lintColor = nE ? 'var(--kb3261e,#b3261e)' : 'var(--kb26a1e,#b26a1e)';
+      v.openLogFromCode = () => this.setState({ right: 'log' });
+    }
+    v.codeRef = this.codeRef;
+    v.codeText = draft != null ? draft : code.map(l => l.s).join('\n');
+    v.onCodeInput = this.onCodeInput;
+    v.onCodeBlur = this.onCodeBlur;
+    v.onCodeKey = this.onCodeKey;
+    v.onCodeCaret = this.onCodeCaret;
+    v.hasCodeErr = !!cErr;
+    v.codeErrText = cErr
+      ? 'Linje ' + cErr.line + ': ' + cErr.msg + ' Visuell editor og PDF viser siste gyldige versjon.'
+      : '';
+    v.codeStatus = draft == null ? '' : cErr ? 'Ikke synkronisert' : 'Synkronisert';
+    v.codeStatusColor = cErr ? 'var(--kb3261e,#b3261e)' : 'var(--koklch05013150,oklch(0.5 0.13 150))';
     v.copyCode = () => {
       try {
-        navigator.clipboard.writeText(code.map(l => l.s).join('\n'));
+        navigator.clipboard.writeText(v.codeText);
       } catch (e) {}
       this.setState({ codeCopied: true });
       setTimeout(() => this.setState({ codeCopied: false }), 1500);
@@ -1925,15 +2269,20 @@ export default class Component extends DCLogic {
         : ceB && ceB.type === 'fig'
           ? 'Caption og label kan endres her. Selve kretsen endres i kretseditoren.'
           : 'Endringene tolkes tilbake til den visuelle editoren.';
-    v.codeEditMsgColor = ce && ce.err ? '#b3261e' : '#6b6862';
+    v.codeEditMsgColor = ce && ce.err ? 'var(--kb3261e,#b3261e)' : 'var(--k6b6862,#6b6862)';
 
     v.outline = doc.blocks
       .filter(b => b.type === 'h1' || b.type === 'h2' || b.type === 'abstract')
       .map(b => ({
         label: b.type === 'abstract' ? 'Sammendrag' : `${nb.num[b.id]} ${b.text || 'Uten tittel'}`,
         pad: b.type === 'h2' ? 24 : 8,
-        bg: s.active === b.id ? '#fff' : 'transparent',
-        color: s.active === b.id ? 'oklch(0.45 0.15 250)' : b.type === 'h2' ? '#7a766f' : '#4a4742',
+        bg: s.active === b.id ? 'var(--acc-g-tint,#e2f3e7)' : 'transparent',
+        color:
+          s.active === b.id
+            ? 'var(--acc-g-ink,#0f6e2b)'
+            : b.type === 'h2'
+              ? 'var(--k7a766f,#7a766f)'
+              : 'var(--k4a4742,#4a4742)',
         fw: s.active === b.id ? 600 : 400,
         onClick: () => this.focusBlock(b.id, 'outline')
       }));
@@ -1961,6 +2310,38 @@ export default class Component extends DCLogic {
           onLeave: this.unhover
         }))
     );
+    const usedImg = new Set(doc.blocks.filter(b => b.type === 'img').map(b => b.file)),
+      usedRaw = new Set();
+    // Bilder brukt med \includegraphics{bilder/…} i LaTeX-blokker står i listen uten «ikke i bruk».
+    doc.blocks
+      .filter(b => b.type === 'raw')
+      .forEach(b => (b.src || '').replace(/\\includegraphics(?:\[[^\]]*\])?\{bilder\/([^}]+)\}/g, (_, f) => usedRaw.add(f)));
+    v.libFiles = (doc.files || [])
+      .filter(f => !usedImg.has(f.file))
+      .map(f => ({
+        unused: !usedRaw.has(f.file),
+        label: 'bilder/' + f.file,
+        onClick: () => {
+          this.unhover();
+          this.insertLib(f.id);
+        },
+        onDragStart: e => {
+          this.unhover();
+          e.dataTransfer.setData('application/x-kobling-file', f.id);
+          e.dataTransfer.effectAllowed = 'copy';
+        },
+        onEnter: e => this.hoverFile(e, { kind: 'lib', fid: f.id }),
+        onLeave: this.unhover
+      }));
+    v.sideOutline = s.sideDrop ? '2px dashed ' + ACC : 'none';
+    v.sideBg = s.sideDrop ? ACCL : 'transparent';
+    v.sideDash = s.sideDrop ? ACC : 'var(--kcfcac2,#cfcac2)';
+    v.sideHintColor = s.sideDrop ? 'var(--koklch042015250,oklch(0.42 0.15 250))' : 'var(--k8d8982,#8d8982)';
+    v.sideHint = s.sideDrop ? 'Slipp for å laste opp til bilder/' : 'Slipp bilder her, eller klikk for å laste opp';
+    v.sideDragOver = this.sideDragOver;
+    v.sideDragLeave = this.sideDragLeave;
+    v.sideDrop = this.sideDrop;
+    v.uploadToLib = () => this.pickImage({ library: true });
     v.mainEnter = e => this.hoverFile(e, { kind: 'tex' });
     v.mainLeave = this.unhover;
 
@@ -1995,12 +2376,17 @@ export default class Component extends DCLogic {
         : [])
     ].map(c => ({
       ...c,
-      color: c.ok ? '#4d8a5a' : '#b26a1e',
+      color: c.ok ? 'var(--k4d8a5a,#4d8a5a)' : 'var(--kb26a1e,#b26a1e)',
       cursor: c.go ? 'pointer' : 'default',
       onClick: () => c.go && this.focusBlock(c.go.id, 'outline')
     }));
+    v.pagePct = Math.min(100, Math.round((pages.length / Math.max(1, S.maxPages)) * 100)) + '%';
+    v.pageBarColor = pages.length > S.maxPages ? 'var(--kb3261e,#b3261e)' : 'oklch(0.62 0.14 150)';
     v.indent = S.indent ? '1.2em' : '0';
+    const pdCtx = texCtx0();
     v.pages = pages.map((pg, pi) => ({
+      outerH: pg.over ? 'auto' : '622px',
+      hCss: pg.over ? 'auto' : (pi === 0 ? 470 : 548) + 'px',
       n: pi + 1,
       isFirst: pi === 0,
       title: pdoc.title,
@@ -2039,6 +2425,17 @@ export default class Component extends DCLogic {
                   : { isRef: true, label: pn.refText(x.target) }
           );
         if (b.type === 'eq') vm.eqEl = this.texEl(b.src, false);
+        if (b.type === 'raw') {
+          vm.isRaw = true;
+          vm.rawEl = React.createElement('div', { dangerouslySetInnerHTML: { __html: rawHtml(b.src, pdCtx) } });
+        }
+        if (b.type === 'h1') {
+          pdCtx.sec = parseInt(pn.num[b.id]) || pdCtx.sec;
+          pdCtx.sub = 0;
+        }
+        if (b.type === 'h2') {
+          pdCtx.sub = parseInt(String(pn.num[b.id]).split('.')[1]) || pdCtx.sub;
+        }
         if (b.type === 'fig')
           vm.svg = b.circuit.comps.length ? drawCircuit(b.circuit, { style: S.style, dec, k: 0.42, maxH: 110 }) : null;
         if (b.type === 'table') {
@@ -2049,18 +2446,18 @@ export default class Component extends DCLogic {
             .slice(1)
             .map(r => ({ t: listItem(r, false) }))
             .filter(x => x.t);
-          vm.tOuter = st === 'grid' ? '0.6px solid #111' : 'none';
-          vm.tTop = st === 'booktabs' ? '1px solid #111' : vm.tOuter;
+          vm.tOuter = st === 'grid' ? '0.6px solid var(--k111,#111)' : 'none';
+          vm.tTop = st === 'booktabs' ? '1px solid var(--k111,#111)' : vm.tOuter;
           vm.tBot = vm.tTop;
-          vm.tCell = st === 'grid' ? '0.6px solid #111' : 'none';
+          vm.tCell = st === 'grid' ? '0.6px solid var(--k111,#111)' : 'none';
           vm.rows = b.rows.map((r, ri) => ({
             rule:
               st === 'grid'
                 ? ri === 0
-                  ? '1.2px double #111'
-                  : '0.6px solid #111'
+                  ? '1.2px double var(--k111,#111)'
+                  : '0.6px solid var(--k111,#111)'
                 : st === 'booktabs' && ri === 0
-                  ? '0.5px solid #111'
+                  ? '0.5px solid var(--k111,#111)'
                   : 'none',
             fw: ri === 0 && st !== 'grid' ? 600 : 400,
             cells: r.map(c => ({ v: c }))
@@ -2078,20 +2475,73 @@ export default class Component extends DCLogic {
 
     const openC = s.comments.filter(c => c.doc === doc.id && !c.resolved).length,
       resC = s.comments.filter(c => c.doc === doc.id && c.resolved).length;
+    const meA = this.account().admin,
+      histOk = meA || S.histOthers !== false,
+      RT = !histOk && s.right === 'history' ? 'pdf' : s.right;
     v.rightTabs = [
       ['PDF', 'pdf'],
       [`Kommentarer ${openC || ''}`, 'comments'],
-      ['Historikk', 'history']
+      ...(histOk ? [['Historikk', 'history']] : []),
+      [`Logg ${s.compile.nE || ''}`, 'log']
     ].map(([l, k]) => ({
       label: l.trim(),
       onClick: () => this.setState({ right: k }),
-      bg: s.right === k ? '#fff' : 'transparent',
-      fw: s.right === k ? 600 : 400,
-      color: s.right === k ? '#1f1e1c' : '#6b6862'
+      bg: RT === k ? 'var(--kfff,#fff)' : 'transparent',
+      fw: RT === k ? 600 : 400,
+      color: RT === k ? 'var(--k1f1e1c,#1f1e1c)' : 'var(--k6b6862,#6b6862)'
     }));
-    v.isPdfTab = s.right === 'pdf';
-    v.isCommentsTab = s.right === 'comments';
-    v.isHistoryTab = s.right === 'history';
+    v.isPdfTab = RT === 'pdf';
+    v.isCommentsTab = RT === 'comments';
+    v.isHistoryTab = RT === 'history';
+    v.isLogTab = RT === 'log';
+    {
+      const C = s.compile,
+        lg = C.log || [];
+      v.logHead =
+        C.status === 'error'
+          ? 'Kompileringen stoppet · ' + C.nE + ' feil'
+          : C.status === 'running'
+            ? 'Kompilerer …'
+            : C.log
+              ? 'Kompilert uten feil'
+              : 'Ikke kompilert ennå';
+      v.logHeadColor =
+        C.status === 'error'
+          ? 'var(--kb3261e,#b3261e)'
+          : C.log && C.status !== 'running'
+            ? 'var(--k4d8a5a,#4d8a5a)'
+            : 'var(--k3d3a36,#3d3a36)';
+      v.logSub = C.log
+        ? C.status === 'error'
+          ? 'PDF-en viser forrige vellykkede versjon. Rett feilene og kompiler på nytt.'
+          : C.nW
+            ? C.nW + (C.nW === 1 ? ' advarsel' : ' advarsler') + ' · PDF-en er oppdatert'
+            : 'main.tex · ' + S.engine + ' · ' + C.time + ' s'
+        : 'Trykk ' + MOD + 'S for å kompilere.';
+      v.logItems = lg.map(d => ({
+        line: d.line,
+        msg: d.msg,
+        hint: d.hint,
+        hasHint: !!d.hint,
+        code: 'l.' + d.line + '  ' + (d.code || ''),
+        badge: d.sev === 'error' ? 'Feil' : 'Advarsel',
+        badgeBg:
+          d.sev === 'error' ? 'var(--koklch09300525,oklch(0.93 0.05 25))' : 'var(--koklch09400675,oklch(0.94 0.06 75))',
+        badgeColor: d.sev === 'error' ? 'var(--kb3261e,#b3261e)' : 'var(--k8a5310,#8a5310)',
+        onClick: () => this.goToLine(d.line),
+        hasFix: !!d.fix,
+        fixLabel: d.fix ? d.fix.label : '',
+        onFix: e => {
+          e.stopPropagation();
+          this.applyFix(d);
+        }
+      }));
+      v.logEmpty = !!C.log && !lg.length && C.status !== 'running';
+      v.logRecompile = this.compile;
+      v.pdfFailed = C.status === 'error';
+      v.pdfFailText = 'Kompileringen stoppet på ' + C.nE + ' feil. Viser forrige vellykkede versjon.';
+      v.openLog = () => this.setState({ right: 'log' });
+    }
     v.commentList = s.comments
       .filter(c => c.doc === doc.id && (s.showResolved || !c.resolved))
       .map(c => {
@@ -2111,7 +2561,7 @@ export default class Component extends DCLogic {
             })),
           resolveLabel: c.resolved ? 'Gjenåpne' : 'Løs',
           opacity: c.resolved ? 0.6 : 1,
-          border: c.bid === s.active ? ACCB : '#e2dfd9'
+          border: c.bid === s.active ? ACCB : 'var(--ke2dfd9,#e2dfd9)'
         };
       });
     v.noComments = !v.commentList.length;
@@ -2223,7 +2673,7 @@ export default class Component extends DCLogic {
     ].map(([l, k]) => ({
       label: l,
       onClick: () => this.setState({ shareTab: k }),
-      bg: s.shareTab === k ? '#fff' : 'transparent',
+      bg: s.shareTab === k ? 'var(--kfff,#fff)' : 'transparent',
       fw: s.shareTab === k ? 600 : 400,
       shadow: s.shareTab === k ? '0 1px 2px rgba(0,0,0,.1)' : 'none'
     }));
@@ -2234,7 +2684,7 @@ export default class Component extends DCLogic {
     v.inviteMsg = s.inviteMsg;
     v.onInviteMsg = e => this.setState({ inviteMsg: e.target.value });
     v.inviteMailBox = s.inviteMail ? '✓' : '';
-    v.inviteMailBg = s.inviteMail ? ACC : '#fff';
+    v.inviteMailBg = s.inviteMail ? ACC : 'var(--kfff,#fff)';
     v.toggleInviteMail = () => this.setState(x => ({ inviteMail: !x.inviteMail }));
     v.smtpWarn = !this.smtpOk();
     v.smtpAction = this.account().admin
@@ -2262,7 +2712,7 @@ export default class Component extends DCLogic {
       label: l,
       onClick: () => this.setState(x => ({ att: { ...x.att, [k]: !x.att[k] } })),
       box: s.att[k] ? '✓' : '',
-      boxBg: s.att[k] ? ACC : '#fff'
+      boxBg: s.att[k] ? ACC : 'var(--kfff,#fff)'
     }));
     v.mailList = s.mails
       .slice(0, 4)
@@ -2271,7 +2721,7 @@ export default class Component extends DCLogic {
         what: m.kind === 'invite' ? 'Invitasjon' : 'Dokument',
         time: m.time,
         status: m.status,
-        stColor: m.status === 'Sendt' ? '#4d8a5a' : '#b26a1e',
+        stColor: m.status === 'Sendt' ? 'var(--k4d8a5a,#4d8a5a)' : 'var(--kb26a1e,#b26a1e)',
         onView: () => this.setState({ mailPreview: m.id })
       }));
     v.hasMails = !!s.mails.length;
@@ -2295,7 +2745,7 @@ export default class Component extends DCLogic {
         att: (mp.att || []).join(', '),
         hasAtt: !!(mp.att && mp.att.length),
         status: mp.status + ' ' + mp.date + ' kl. ' + mp.time,
-        stColor: mp.status === 'Sendt' ? '#4d8a5a' : '#b26a1e'
+        stColor: mp.status === 'Sendt' ? 'var(--k4d8a5a,#4d8a5a)' : 'var(--kb26a1e,#b26a1e)'
       };
     } else v.mp = {};
     v.people = s.people.map(p => ({
@@ -2328,7 +2778,10 @@ export default class Component extends DCLogic {
     if (p) {
       const q = p.q.trim().toLowerCase(),
         mt = o => !q || (o.n + ' ' + o.s + ' ' + (o.c || o.tex || '')).toLowerCase().includes(q);
-      const sel = on => ({ border: on ? `2px solid ${ACC}` : '1px solid #e2dfd9', bg: on ? ACCL : '#fff' });
+      const sel = on => ({
+        border: on ? `2px solid ${ACC}` : '1px solid var(--ke2dfd9,#e2dfd9)',
+        bg: on ? ACCL : 'var(--kfff,#fff)'
+      });
       const val = { num: p.num || '0', prefix: p.prefix, unit: p.unit };
       v.pk = {
         q: p.q,
@@ -2347,7 +2800,7 @@ export default class Component extends DCLogic {
         ].map(([l, k]) => ({
           label: l,
           onClick: () => this.pk({ tab: k, err: '' }),
-          bg: p.tab === k ? '#fff' : 'transparent',
+          bg: p.tab === k ? 'var(--kfff,#fff)' : 'transparent',
           fw: p.tab === k ? 600 : 400
         })),
         num: p.num,
@@ -2393,11 +2846,11 @@ export default class Component extends DCLogic {
       label: g,
       count: s.docs.filter(d => d.folder === g).length,
       onClick: () => this.setState({ group: g }),
-      bg: s.group === g ? '#e4e0d9' : 'transparent',
+      bg: s.group === g ? 'var(--ke4e0d9,#e4e0d9)' : 'transparent',
       fw: s.group === g ? 600 : 400
     }));
     v.syncText = S.sync ? 'Synkronisert med ' + S.server.replace(/^https?:\/\//, '') : 'Synkronisering av';
-    v.syncColor = S.sync ? '#4d8a5a' : '#a29e97';
+    v.syncColor = S.sync ? 'var(--k4d8a5a,#4d8a5a)' : 'var(--ka29e97,#a29e97)';
     v.projectCards = s.docs
       .filter(d => d.folder === s.group)
       .map(d => ({
@@ -2408,7 +2861,7 @@ export default class Component extends DCLogic {
           e.stopPropagation();
           this.deleteDoc(d.id);
         },
-        border: d.id === s.cur ? ACCB : '#e2dfd9',
+        border: d.id === s.cur ? ACCB : 'var(--ke2dfd9,#e2dfd9)',
         cols: S.cols === 2 ? '1fr 1fr' : '1fr'
       }));
     v.openNewProj = () => this.setState({ newProj: { title: '', tpl: 'rapport', err: '' } });
@@ -2448,8 +2901,8 @@ export default class Component extends DCLogic {
         tpls: TPLS.map(x => ({
           ...x,
           onClick: () => this.setState(y => ({ newProj: { ...y.newProj, tpl: x.k } })),
-          border: np.tpl === x.k ? `2px solid ${ACC}` : '1px solid #e2dfd9',
-          bg: np.tpl === x.k ? ACCL : '#fff'
+          border: np.tpl === x.k ? `2px solid ${ACC}` : '1px solid var(--ke2dfd9,#e2dfd9)',
+          bg: np.tpl === x.k ? ACCL : 'var(--kfff,#fff)'
         }))
       };
     } else v.np = { tpls: [] };
@@ -2458,7 +2911,7 @@ export default class Component extends DCLogic {
       isToggle: true,
       label,
       onToggle: fn,
-      tbg: on ? ACC : '#d6d2cb',
+      tbg: on ? ACC : 'var(--kd6d2cb,#d6d2cb)',
       knob: on ? 'translateX(16px)' : 'translateX(0)'
     });
     const segX = (label, cur, opts, fn, font) => ({
@@ -2467,7 +2920,7 @@ export default class Component extends DCLogic {
       opts: opts.map(([l, val]) => ({
         label: l,
         onClick: () => fn(val),
-        bg: cur === val ? '#fff' : 'transparent',
+        bg: cur === val ? 'var(--kfff,#fff)' : 'transparent',
         shadow: cur === val ? '0 1px 2px rgba(0,0,0,.1)' : 'none',
         font: font || 'inherit'
       }))
@@ -2492,16 +2945,16 @@ export default class Component extends DCLogic {
       hasErr: !!o.err,
       help: o.help || '',
       hasHelp: !!o.help,
-      border: o.err ? '#e8b4ae' : '#e2dfd9'
+      border: o.err ? 'var(--ke8b4ae,#e8b4ae)' : 'var(--ke2dfd9,#e2dfd9)'
     });
     const btns = arr => ({
       isButtons: true,
       btns: arr.map(([label, fn, primary, disabled]) => ({
         label,
         onClick: disabled ? undefined : fn,
-        bg: primary ? ACC : '#fff',
-        color: primary ? '#fff' : '#1f1e1c',
-        border: primary ? ACC : '#d6d2cb',
+        bg: primary ? ACC : 'var(--kfff,#fff)',
+        color: primary ? 'var(--kfff,#fff)' : 'var(--k1f1e1c,#1f1e1c)',
+        border: primary ? ACC : 'var(--kd6d2cb,#d6d2cb)',
         opacity: disabled ? 0.45 : 1,
         cursor: disabled ? 'default' : 'pointer'
       }))
@@ -2538,7 +2991,7 @@ export default class Component extends DCLogic {
       isTab: true,
       label: l,
       onClick: () => this.setState({ setTab: k }),
-      bg: TB === k ? '#e4e0d9' : 'transparent',
+      bg: TB === k ? 'var(--ke4e0d9,#e4e0d9)' : 'transparent',
       fw: TB === k ? 600 : 400
     });
     v.setTabs = [
@@ -2624,26 +3077,37 @@ export default class Component extends DCLogic {
           isInfo: true,
           label: 'TeX-distribusjon',
           value: this._server || isWeb ? 'Kompileres på serveren' : 'Lokal TeX Live 2026',
-          color: '#4d8a5a'
+          color: 'var(--k4d8a5a,#4d8a5a)'
         }
       ];
     else if (TB === 'konto')
       rows = [
+        head('UTSEENDE'),
+        seg('Tema', 'theme', [
+          ['Lys', 'light'],
+          ['Mørk', 'dark'],
+          ['Som systemet', 'system']
+        ]),
         head('KONTO'),
         { isInfo: true, label: 'Innlogget som', value: ME.name + ' · ' + ME.email, color: ME.color || USERS[ME.id].color },
-        { isInfo: true, label: 'Rolle', value: isAdmin ? 'Administrator' : 'Bruker', color: isAdmin ? ACC : '#8d8982' },
+        {
+          isInfo: true,
+          label: 'Rolle',
+          value: isAdmin ? 'Administrator' : 'Bruker',
+          color: isAdmin ? ACC : 'var(--k8d8982,#8d8982)'
+        },
         {
           isInfo: true,
           label: 'Server',
           value: S.server.replace(/^https?:\/\//, ''),
-          color: S.sync ? '#4d8a5a' : '#a29e97'
+          color: S.sync ? 'var(--k4d8a5a,#4d8a5a)' : 'var(--ka29e97,#a29e97)'
         },
         tog('Synkroniser automatisk', 'sync'),
         {
           isInfo: true,
           label: 'Sanntid mellom faner',
           value: this._server ? 'Via serveren' : this.bc ? 'På' : 'Ikke støttet',
-          color: this._server || this.bc ? '#4d8a5a' : '#a29e97'
+          color: this._server || this.bc ? 'var(--k4d8a5a,#4d8a5a)' : 'var(--ka29e97,#a29e97)'
         },
         ...(isAdmin
           ? []
@@ -2660,6 +3124,13 @@ export default class Component extends DCLogic {
       ];
     else if (TB === 'server')
       rows = [
+        head('TILGANG FOR ANDRE BRUKERE'),
+        togX('Vis versjonshistorikk', S.histOthers !== false, () => this.setS('histOthers', S.histOthers === false)),
+        note(
+          S.histOthers === false
+            ? 'Bare administratorer ser Historikk-fanen. Historikken lagres fortsatt og tas med i backup.'
+            : 'Alle med tilgang til et dokument kan se og gjenopprette tidligere versjoner.'
+        ),
         head('SERVER'),
         fld('Serveradresse', S.server, x => this.setS('server', x.trim()), {
           ph: 'https://mitt-navn.duckdns.org',
@@ -2670,13 +3141,15 @@ export default class Component extends DCLogic {
           isInfo: true,
           label: 'Status',
           value: S.sync ? 'Tilkoblet' : 'Frakoblet',
-          color: S.sync ? '#4d8a5a' : '#a29e97'
+          color: S.sync ? 'var(--k4d8a5a,#4d8a5a)' : 'var(--ka29e97,#a29e97)'
         },
         {
           isInfo: true,
           label: 'Brukere på serveren',
-          value: ACCOUNTS.length + ' (' + ACCOUNTS.filter(a => a.admin).length + ' administrator)',
-          color: '#4d8a5a'
+          value: s.serverUsers
+            ? s.serverUsers.n + ' (' + s.serverUsers.admins + ' administrator)'
+            : ACCOUNTS.length + ' (' + ACCOUNTS.filter(a => a.admin).length + ' administrator)',
+          color: 'var(--k4d8a5a,#4d8a5a)'
         }
       ];
     else if (TB === 'duck')
@@ -2788,7 +3261,12 @@ export default class Component extends DCLogic {
           : []),
         ...(pv === 'proton'
           ? [
-              { isInfo: true, label: 'Server', value: 'smtp.protonmail.ch · 587 · STARTTLS', color: '#4d8a5a' },
+              {
+                isInfo: true,
+                label: 'Server',
+                value: 'smtp.protonmail.ch · 587 · STARTTLS',
+                color: 'var(--k4d8a5a,#4d8a5a)'
+              },
               fld('SMTP-brukernavn', mt.user, x => ms({ user: x.trim() }), {
                 ph: ME.email,
                 err: pErr,
@@ -2827,7 +3305,7 @@ export default class Component extends DCLogic {
                 ? [fld('Avsendernavn', mt.fromName, x => ms({ fromName: x }), { ph: ME.name })]
                 : [fld('Avsender', mt.from, x => ms({ from: x }), { ph: ME.name + ' <' + ME.email + '>' })])
             ]),
-        { isInfo: true, label: 'Sendes som', value: smtpFrom(mt) || '–', color: '#4a4742' },
+        { isInfo: true, label: 'Sendes som', value: smtpFrom(mt) || '–', color: 'var(--k4a4742,#4a4742)' },
         togX('Varsle på e-post om nye kommentarer', mt.notify, () => ms({ notify: !mt.notify })),
         btns([[mu.testing ? 'Tester …' : 'Send test-e-post', this.testSmtp, true, mu.testing]]),
         ...(mu.test
@@ -2836,7 +3314,7 @@ export default class Component extends DCLogic {
                 isInfo: true,
                 label: mu.test.ok ? 'OK' : 'Feil',
                 value: mu.test.msg,
-                color: mu.test.ok ? '#4d8a5a' : '#b3261e'
+                color: mu.test.ok ? 'var(--k4d8a5a,#4d8a5a)' : 'var(--kb3261e,#b3261e)'
               }
             ]
           : []),
@@ -2846,7 +3324,7 @@ export default class Component extends DCLogic {
           value: this.smtpOk()
             ? 'Klar. Invitasjoner sendes fra ' + (mt.user || smtpFrom(mt))
             : 'Ikke satt opp. E-post legges i utboksen.',
-          color: this.smtpOk() ? '#4d8a5a' : '#b26a1e'
+          color: this.smtpOk() ? 'var(--k4d8a5a,#4d8a5a)' : 'var(--kb26a1e,#b26a1e)'
         }
       ];
     } else if (TB === 'backup')
@@ -2977,13 +3455,19 @@ export default class Component extends DCLogic {
     v.duckIp = du.ip || '–';
     v.duckLast = du.last || 'Aldri';
     v.duckNext = !d.on ? 'DuckDNS er av' : du.last ? 'Om ' + d.interval + ' min' : 'Etter første oppdatering';
-    v.duckLog = du.log.map(l => ({ txt: l.t + '  ' + l.txt, color: l.ok ? '#3d6b47' : '#b3261e' }));
+    v.duckLog = du.log.map(l => ({
+      txt: l.t + '  ' + l.txt,
+      color: l.ok ? 'var(--k3d6b47,#3d6b47)' : 'var(--kb3261e,#b3261e)'
+    }));
     v.noDuckLog = !du.log.length;
     v.duckPortNote = 'Videresend TCP ' + (d.tls ? '443' : dep.port) + ' i ruteren til serveren for å nå den utenfra. Virker ikke adressen hjemmefra, prøv fra mobilnett: mange rutere sender ikke trafikk til egen offentlig IP tilbake inn (NAT-loopback).';
     v.hasSmbTest = !!bu.test;
     v.smbTestMsg = bu.test ? bu.test.msg : '';
-    v.smbTestColor = bu.test && bu.test.ok ? '#3d6b47' : '#b3261e';
-    v.smbTestBg = bu.test && bu.test.ok ? 'oklch(0.96 0.03 150)' : 'oklch(0.96 0.03 25)';
+    v.smbTestColor = bu.test && bu.test.ok ? 'var(--k3d6b47,#3d6b47)' : 'var(--kb3261e,#b3261e)';
+    v.smbTestBg =
+      bu.test && bu.test.ok
+        ? 'var(--koklch096003150,oklch(0.96 0.03 150))'
+        : 'var(--koklch09600325,oklch(0.96 0.03 25))';
     v.smbRunning = !!bu.run;
     v.smbPct = bu.run ? Math.min(100, Math.round(bu.run.pct)) : 0;
     v.smbStep = bu.run ? bu.run.step : '';
@@ -3187,8 +3671,8 @@ export default class Component extends DCLogic {
         label: l,
         key,
         onClick: () => this.circSet({ tool: k, pending: null }),
-        bg: c.tool === k ? '#fff' : 'transparent',
-        color: c.tool === k ? '#1f1e1c' : '#6b6862',
+        bg: c.tool === k ? 'var(--kfff,#fff)' : 'transparent',
+        color: c.tool === k ? 'var(--k1f1e1c,#1f1e1c)' : 'var(--k6b6862,#6b6862)',
         shadow: c.tool === k ? '0 1px 2px rgba(0,0,0,.1)' : 'none'
       }));
       v.layoutOpts = [
@@ -3199,8 +3683,8 @@ export default class Component extends DCLogic {
         onClick: () => {
           if (c.auto !== on) this.setAuto(on);
         },
-        bg: c.auto === on ? '#fff' : 'transparent',
-        color: c.auto === on ? '#1f1e1c' : '#6b6862',
+        bg: c.auto === on ? 'var(--kfff,#fff)' : 'transparent',
+        color: c.auto === on ? 'var(--k1f1e1c,#1f1e1c)' : 'var(--k6b6862,#6b6862)',
         shadow: c.auto === on ? '0 1px 2px rgba(0,0,0,.1)' : 'none'
       }));
       v.showTidy = !c.auto;
@@ -3346,7 +3830,7 @@ export default class Component extends DCLogic {
         ].map(([l, k]) => ({
           label: l,
           onClick: () => this.setState({ paste: { ...ps, mode: k } }),
-          bg: ps.mode === k ? '#fff' : 'transparent',
+          bg: ps.mode === k ? 'var(--kfff,#fff)' : 'transparent',
           shadow: ps.mode === k ? '0 1px 2px rgba(0,0,0,.1)' : 'none'
         }))
       : [];
@@ -3375,7 +3859,7 @@ export default class Component extends DCLogic {
         this.setS('cols', c);
         this.toast(c === 2 ? 'Tospalte, som i malen' : 'Én spalte');
       },
-      bg: S.cols === c ? '#fff' : 'transparent',
+      bg: S.cols === c ? 'var(--kfff,#fff)' : 'transparent',
       shadow: S.cols === c ? '0 1px 2px rgba(0,0,0,.12)' : 'none',
       fw: S.cols === c ? 600 : 400
     }));
@@ -3400,47 +3884,68 @@ export default class Component extends DCLogic {
       this.setState(x => ({ fileMenu: !x.fileMenu, share: false }));
     };
     v.closeFileMenu = () => this.setState({ fileMenu: false });
-    v.fileItems = [
-      ['Ny fil …', MOD + 'N', () => this.setState({ newProj: { title: '', tpl: 'rapport', err: '' } })],
-      ['Dupliser dokument', '', () => this.duplicateDoc()],
-      ['Last ned .tex', '', () => v.downloadTex()],
-      [
-        'Skriv ut / lagre som PDF',
-        MOD + 'P',
-        () => {
-          this.setState({ view: 'editor', right: 'pdf' });
-          setTimeout(this.printPdf, 300);
-        }
-      ],
-      [
-        'Last ned bilder (' + doc.blocks.filter(b => b.type === 'img').length + ')',
-        '',
-        () => {
-          const im = doc.blocks.filter(b => b.type === 'img');
-          if (!im.length) return this.toast('Dokumentet har ingen bilder');
-          im.forEach((b, i) =>
-            setTimeout(() => {
-              try {
-                const a = document.createElement('a');
-                a.href = URL.createObjectURL(dataToBlob(b.src));
-                a.download = b.file;
-                document.body.appendChild(a);
-                a.click();
-                a.remove();
-              } catch (e) {}
-            }, i * 250)
-          );
-        }
-      ],
-      ['Alle prosjekter', '', () => this.setState({ view: 'projects', circ: null })]
-    ].map(([label, key, fn]) => ({
-      label,
-      key,
-      onClick: () => {
-        this.setState({ fileMenu: false });
-        fn();
-      }
-    }));
+    {
+      const mk = ([label, key, icon, fn]) => ({
+          label,
+          key,
+          icon,
+          onClick: () => {
+            this.setState({ fileMenu: false });
+            fn();
+          }
+        }),
+        nImg = doc.blocks.filter(b => b.type === 'img').length;
+      v.fileItemsNew = [
+        [
+          'Nytt dokument …',
+          MOD + 'N',
+          'M8 3.5v9M3.5 8h9',
+          () => this.setState({ newProj: { title: '', tpl: 'rapport', err: '' } })
+        ],
+        ['Dupliser dokument', '', 'M5.5 5.5h7v7h-7zM10.5 5.5v-2h-7v7h2', () => this.duplicateDoc()],
+        ['Last opp bilder …', '', 'M8 11V3.5M5 6.5l3-3 3 3M3 12.5h10', () => this.pickImage({ library: true })]
+      ].map(mk);
+      v.fileItemsExp = [
+        [
+          'PDF',
+          MOD + 'P',
+          'M4 1.75h5.25L12.5 5v9.25H4zM6 9.5h4M6 11.5h3',
+          () => {
+            this.setState({ view: 'editor', right: 'pdf' });
+            setTimeout(this.printPdf, 300);
+          }
+        ],
+        ['LaTeX-kildekode', '.tex', 'M6 5 3 8l3 3M10 5l3 3-3 3', () => v.downloadTex()],
+        [
+          'Bilder',
+          nImg ? String(nImg) : '',
+          'M2.5 3.5h11v9h-11zM2.5 10.5l3.5-3 3 2.5 2-1.5 2.5 2',
+          () => {
+            const im = doc.blocks.filter(b => b.type === 'img');
+            if (!im.length) return this.toast('Dokumentet har ingen bilder');
+            im.forEach((b, i) =>
+              setTimeout(() => {
+                try {
+                  const a = document.createElement('a');
+                  a.href = URL.createObjectURL(dataToBlob(b.src));
+                  a.download = b.file;
+                  document.body.appendChild(a);
+                  a.click();
+                  a.remove();
+                } catch (e) {}
+              }, i * 250)
+            );
+          }
+        ]
+      ].map(mk);
+      v.fileAllProjects = () => this.setState({ fileMenu: false, view: 'projects', circ: null });
+      v.fileBtnBg = s.fileMenu ? 'var(--kfff,#fff)' : 'var(--kfbfaf8,#fbfaf8)';
+      v.fileBtnBorder = s.fileMenu ? 'oklch(0.55 0.15 250)' : 'var(--ke2dfd9,#e2dfd9)';
+      v.fileBtnRing = s.fileMenu
+        ? '0 0 0 3px var(--koklch086006250,oklch(0.86 0.06 250))'
+        : '0 1px 2px rgba(0,0,0,.06)';
+      v.fileChevron = s.fileMenu ? 'rotate(180deg)' : 'none';
+    }
     v.recentItems = s.recent
       .map(id => s.docs.find(x => x.id === id))
       .filter(Boolean)
@@ -3449,8 +3954,10 @@ export default class Component extends DCLogic {
         title: x.title,
         meta: x.folder + (x.id === s.cur ? ' · åpen nå' : ''),
         fw: x.id === s.cur ? 600 : 400,
+        border: x.id === s.cur ? 'oklch(0.55 0.15 250)' : 'var(--ke2dfd9,#e2dfd9)',
         onClick: () => this.openDoc(x.id)
       }));
+    v.hasRecent = v.recentItems.length > 0;
     const hv = s.hover;
     v.hoverOpen = !!hv && s.view === 'editor';
     v.hoverTop = hv ? hv.top : 0;
@@ -3473,6 +3980,13 @@ export default class Component extends DCLogic {
           ' ledninger'
         : '';
       v.hoverCaption = fb ? fb.caption : '';
+    } else if (hv && hv.kind === 'lib') {
+      const lf = (doc.files || []).find(x => x.id === hv.fid);
+      v.hoverIsImg = true;
+      v.hoverTitle = lf ? 'bilder/' + lf.file : '';
+      v.hoverImg = lf ? lf.src : '';
+      v.hoverCaption = '';
+      v.hoverMeta = 'Ikke brukt i dokumentet ennå · dra det inn eller klikk';
     } else if (hv && hv.kind === 'img') {
       const ib = doc.blocks.find(x => x.id === hv.bid);
       v.hoverTitle = ib ? 'bilder/' + ib.file : '';
@@ -3517,7 +4031,7 @@ export default class Component extends DCLogic {
     if (!k)
       return React.createElement(
         'span',
-        { style: { fontFamily: 'JetBrains Mono, monospace', fontSize: '0.75em', color: '#6b6862' } },
+        { style: { fontFamily: 'Geist Mono, monospace', fontSize: '0.75em', color: 'var(--k6b6862,#6b6862)' } },
         src
       );
     let html;

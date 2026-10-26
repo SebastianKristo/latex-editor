@@ -41,3 +41,20 @@ test('HTTPS-serveren svarer med eksisterende sertifikat selv om fornyelse feiler
   await assert.rejects(new Promise((res, rej) => request({ host: '127.0.0.1', port, path: '/api/health', rejectUnauthorized: false }, res).on('error', rej).end()));
   tls.stop(); await app.close(); rmSync(dir, { recursive: true, force: true });
 });
+
+test('oppstart venter ikke på Let\'s Encrypt (sertifikat hentes i bakgrunnen)', async () => {
+  const { createServer } = await import('node:http');
+  const hang = createServer(() => {}); // ACME-server som aldri svarer
+  await new Promise(r => hang.listen(0, '127.0.0.1', r));
+  const dir = mkdtempSync(join(tmpdir(), 'kobling-tls-'));
+  const app = await buildApp(loadConfig({ KOBLING_DATA: dir }), { background: false });
+  await app.listen({ port: 0 });
+  const logs = [];
+  const t0 = Date.now();
+  const tls = await startTls(app, { getDuck: () => ({ tls: true, domain: 'mitt-navn', token: 'x' }), dataDir: dir, port: 0, email: 'a@b.no', log: x => logs.push(x), directoryUrl: `http://127.0.0.1:${hang.address().port}/dir` });
+  assert.ok(Date.now() - t0 < 1000, 'startTls brukte ' + (Date.now() - t0) + ' ms');
+  assert.ok(logs.some(l => /henter sertifikat/.test(l.txt)));
+  const r = await app.inject({ method: 'GET', url: '/api/health' });
+  assert.equal(r.statusCode, 200);
+  tls.stop(); hang.closeAllConnections(); hang.close(); await app.close(); rmSync(dir, { recursive: true, force: true });
+});

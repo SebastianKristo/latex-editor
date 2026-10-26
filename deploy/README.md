@@ -10,7 +10,7 @@ Oppretter en Debian 13-LXC og installerer Kobling direkte (TeX Live, Node.js 22,
 Velg *Standard* eller *Avansert* (CT-ID, ressurser, lagring, bro/VLAN, statisk IP, port og administrator). Uten spørsmål: `KOBLING_DEFAULTS=1 CTID=130 RAM=4096 bash -c "…"`.
 
 - Innstillinger: `/etc/kobling/kobling.env` i containeren (samme variabler som under), deretter `systemctl restart kobling`.
-- Oppdatering: `pct exec <CTID> -- kobling-update` (henter siste versjon, bygger og starter på nytt; innstillinger og data beholdes).
+- Oppdatering: `pct exec <CTID> -- kobling-update` (henter siste versjon, bygger og starter på nytt; innstillinger og data beholdes). Installert før 27. oktober 2026? Kjør da `pct exec <CTID> -- /usr/local/sbin/kobling-update` én gang.
 - Data: `/var/lib/kobling`. Logg: `journalctl -u kobling -f`.
 
 ## Proxmox VE 8 (LXC med Docker)

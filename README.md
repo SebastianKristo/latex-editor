@@ -41,6 +41,31 @@ Første gang serveren startes uten brukere viser klienten «Opprett administrato
 - **Kompileringsloggen** samler feilsjekken i klienten og den ekte `latexmk`-loggen fra serveren (feil og advarsler med linjenummer og norsk forklaring). Feil fra feilsjekken stopper kompileringen, som i prototypen.
 - **Versjonshistorikken** ligger i et eget Yjs-rom per dokument. Når admin slår av «Vis versjonshistorikk», nekter serveren vanlige brukere tilgang til rommet og kobler fra dem som er inne.
 - **LaTeX-koden kan redigeres direkte** i «Kode» og «Delt». Endringer leses tilbake til blokker, og egne `\usepackage`-linjer tas vare på. LaTeX som ikke passer en kjent blokktype (for eksempel `align` eller egne makroer), blir en «LaTeX»-blokk som skrives ut uendret. Innlimt LaTeX i den visuelle editoren blir også til blokker, og «{ } LaTeX» setter inn en tom LaTeX-blokk.
+- **TikZ- og CircuiTikZ-figurer i forhåndsvisningen** (README i handoff, §9):
+  - Ved hver kompilering trekker serveren ut hvert `tikzpicture`/`circuitikz`-miljø, inkludert `\resizebox`/`\scalebox` rundt, og kompilerer det for seg med `standalone` og samme preamble. `dvisvgm` gjør resultatet om til SVG.
+  - Nøkkelen er SHA-256 av preamble + figurkode (`packages/core/src/figures.js`). Klienten regner ut den samme nøkkelen, og uendrede figurer kompileres aldri på nytt.
+  - Bildene hentes fra `/api/docs/:id/fig/<hash>.svg`, med samme tilgang som dokumentet.
+  - Mens kompileringen pågår, pulserer plassholderen. Feil i en figur vises i Logg-fanen med linjenummer i `main.tex`, og plassholderen blir rød.
+- **Gjenoppretting** (Innstillinger › Backup til SMB):
+  - Kilde: «Hent fra sharen» eller «Gjenopprett fra fil …». Filen kan være `.tar.zst` eller `.json`, og prototypens format virker også.
+  - Velg «Slå sammen» eller «Erstatt alt», og hvilke dokumenter som skal tas med.
+  - «Ta backup av nåværende tilstand først» lager `…_for-gjenoppretting.tar.zst`. Den lagres på sharen, eller i `$KOBLING_DATA/backups` uten SMB.
+- **SMB-mappevelger:** «Koble til server» lister sharer med `smbclient -L`. Deretter blar man i mapper, kan lage nye med «Ny mappe» og velger «Bruk denne mappen». Feil som NT_STATUS_LOGON_FAILURE og manglende svar på port 445 vises på norsk.
+- **Delingslenker via DuckDNS:** når DuckDNS og «Bruk DuckDNS-adressen i delingslenker og invitasjoner» er på, bygger serveren alle lenker og invitasjoner fra `https://<navn>.duckdns.org`, eller `http://<navn>.duckdns.org:<port>` uten HTTPS.
+- **Oppdatering av serveren** (Innstillinger › Oppdatering):
+  - «Se etter oppdateringer» leser GitHub Releases. Stabil-kanalen bruker bare vanlige releaser, Beta tar også med forhåndsversjoner.
+  - På Proxmox legger «Oppdater nå» en forespørsel i `$KOBLING_DATA/update/`. Systemd-enheten `kobling-update.path` kjører da `kobling-update` som root for taggen.
+  - Stegene vises i appen: varsle brukere, backup, laste ned, bygge, starte og helsesjekk. «Gå tilbake til …» installerer forrige versjon igjen.
+  - Automatisk oppdatering kjører kl. 02, 04 eller 06, og brukerne varsles 5 minutter før.
+  - Etter en oppdatering laster åpne apper seg på nytt.
+  - I Docker kan ikke containeren bytte sitt eget image. Der viser fanen `update.sh` for verten.
+- **Ellers fra prototypen:**
+  - Enter i et avsnitt gir linjeskift (`\\`).
+  - Sidepanelet kan skjules med ⌘\.
+  - Blokker kan dras fra ⋮⋮.
+  - Angre og gjør om (⌘Z/⇧⌘Z) synkroniseres som vanlige endringer.
+  - Prosjektkortene viser en miniside.
+  - Filer kan få nytt navn, og `\includegraphics` oppdateres.
 - **Live-markører** går via Yjs awareness: hvem som står i hvilken blokk.
 - **PDF**: klienten sender generert LaTeX til `/api/compile`, og serveren kjører `latexmk` og svarer med PDF. Klikk i PDF-en slår opp linjen med SyncTeX og hopper til blokken. Aktiv blokk markeres i PDF-en.
 - **Deling**: invitasjoner gir lenken `https://<server>/i/<kode>`, gyldig i 7 dager og uten konto. E-post sendes med SMTP (Proton Mail som standard). Uten SMTP havner e-posten i utboksen og lenken virker likevel.
@@ -57,6 +82,10 @@ Konfigureres med miljøvariablene i `deploy/.env.example`. I tillegg finnes diss
 - `KOBLING_ADMIN_EMAIL` / `KOBLING_ADMIN_PASSWORD` (valgfritt) – oppretter administratoren ved start. Ellers opprettes administratoren i nettleseren første gang.
 - `KOBLING_DATA` (standard `/data`) og `KOBLING_WEB_DIR` (bygget klient).
 - `KOBLING_LISTEN_PORT` – porten serveren lytter på. I imaget er den 8080, mens `KOBLING_PORT` fra `.env` er vertsporten som compose mapper til 8080.
+- `KOBLING_INSTALL` – `proxmox` (settes av installasjonen) eller `docker` (satt i imaget). Den avgjør hvordan «Oppdater nå» virker.
+- `KOBLING_UPDATE_REPO` (standard `SebastianKristo/latex-editor`) – repoet nye versjoner hentes fra.
+
+**Ny versjon:** bump `version` i `apps/server/package.json` (og desktop-appen), merge til `main`, og push taggen `vX.Y.Z`. Taggen lager en GitHub Release med desktop-appene, og serverne ser den under «Se etter oppdateringer».
 
 ```sh
 docker build -t ghcr.io/sebastiankristo/kobling-server .
@@ -72,8 +101,18 @@ Imaget bygger på Debian 13 (trixie, TeX Live 2024). Grunnimaget kan overstyres 
   - Et bilde lastet opp i fillisten kan brukes med `\includegraphics{bilder/…}` og kompilerer.
   - Mørk modus beholder hvite PDF-sider.
   - Vanlige brukere mister Historikk når admin slår den av, både i appen og i API-et.
-- **Kjernen:** 98 tester. Rundtur visuell → LaTeX → visuell for alle blokker i eksemplene. Diodekretsen fra `main.tex` importeres og eksporteres uten tap. Yjs-modellen fletter samtidige endringer.
-- **Serveren:** 15 tester. Ikke-admin får 403 på alle admin-API-er. Invitasjoner og roller fungerer. Lesere og kommentatorer begrenses i Yjs. Varsel om nye kommentarer går på e-post. Utlogging, HTTPS-servering og DuckDNS-TXT er dekket.
+- **Handoff §9 og §10 i nettleseren mot ekte server, `latexmk`, `dvisvgm` og Samba:**
+  - En CircuiTikZ-figur i `\resizebox` vises som SVG i editoren og i forhåndsvisningen etter kompilering.
+  - En figur med feil blir rød, og feilen står i Logg-fanen med riktig linje.
+  - Mørk modus inverterer figuren i editoren, men ikke på papiret.
+  - SMB-mappevelgeren: feil passord gir NT_STATUS_LOGON_FAILURE. Den lagrede mappen åpnes, og man kan bla, lage mappe og velge den.
+  - Backup fungerer, «Hent fra sharen» finner den, og ett slettet dokument gjenopprettes med sikkerhetskopi først.
+  - Gjenoppretting fra en `.json`-fil i prototypens format virker.
+  - Delingslenken bruker DuckDNS-adressen.
+  - Oppdateringsfanen sjekker ekte GitHub Releases og viser `update.sh`.
+  - Enter gir `\\`, angre og gjør om synkroniseres, nytt filnavn oppdaterer `\includegraphics`, og et skjult sidepanel huskes.
+- **Kjernen:** 107 tester (blant annet at klient og server får samme figurnøkkel). Rundtur visuell → LaTeX → visuell for alle blokker i eksemplene. Diodekretsen fra `main.tex` importeres og eksporteres uten tap. Yjs-modellen fletter samtidige endringer.
+- **Serveren:** 24 tester, blant annet figurer med ekte `latex` + `dvisvgm` (mellomlager, tilgang, linjenummer ved feil), lenker via DuckDNS, og oppdatering (kanaler, bestilling til `kobling-update`, status etter omstart, Docker). Ikke-admin får 403 på alle admin-API-er. Invitasjoner og roller fungerer. Lesere og kommentatorer begrenses i Yjs. Varsel om nye kommentarer går på e-post. Utlogging, HTTPS-servering og DuckDNS-TXT er dekket.
 - **LaTeX:** alle 5 eksempeldokumentene kompilerer med `latexmk` uten feil, med én og med to spalter (lokalt med TeX Live 2023, og i Docker-imaget).
 - **I nettleseren (Playwright mot ekte server):**
   - Førstegangsoppsett og innlogging.
@@ -82,7 +121,7 @@ Imaget bygger på Debian 13 (trixie, TeX Live 2024). Grunnimaget kan overstyres 
   - Lenken åpner dokumentet uten konto.
   - En endring hos den ene vises hos den andre etter om lag 115 ms, inkludert skriving.
   - Live-markør, kommentar med e-postvarsel, og PDF-klikk som hopper til riktig blokk og markerer den.
-- **Backup:** backup gjennom UI-et til en ekte Samba-share, endring av dokumentet og «Gjenopprett» gir tilbake det gamle innholdet. Det samme kjøres i CI med `tools/smb-backup-test.mjs`.
+- **Backup:** backup gjennom UI-et til en ekte Samba-share, endring av dokumentet og «Gjenopprett» gir tilbake det gamle innholdet. `tools/smb-backup-test.mjs` (kjøres også i CI) dekker backup, lesing fra sharen, sikkerhetskopi, «Slå sammen» og «Erstatt alt».
 - **Docker:** imaget bygger og starter, kompilerer alle eksemplene og tar backup til SMB fra containeren.
   - Compose-filen fra `generators.js` virker med egen port (9090).
   - Oppsettet i Unraid-malen (bridge, portmapping, appdata, variabler) starter containeren.
@@ -93,5 +132,5 @@ Imaget bygger på Debian 13 (trixie, TeX Live 2024). Grunnimaget kan overstyres 
 - **Proton Mail:** ikke testet mot ekte Proton SMTP, fordi det krever konto og token. Samme kode er testet mot en lokal SMTP-server med STARTTLS og innlogging.
 - **Let's Encrypt:** utvekslingen er ikke kjørt mot Let's Encrypt, fordi det krever et ekte DuckDNS-domene. Servering med sertifikat og fornyelseslogikken er testet.
 - **Desktop-installere:** macOS (.dmg) og Windows (.msi) bygges bare i CI på egne runnere og er ikke kjørt her. Appene er ikke signert.
-- **Proxmox:** ikke kjørt på en ekte Proxmox-node. Helper-skriptet `kobling.sh` er testet med simulerte Proxmox-kommandoer, og installasjonsdelen (`kobling-install.sh`, inkludert `kobling-update`) er kjørt i en ren Ubuntu 24.04-container. Det Docker-baserte `install.sh` er bare syntakssjekket.
+- **Proxmox:** ikke kjørt på en ekte Proxmox-node. Helper-skriptet `kobling.sh` er testet med simulerte Proxmox-kommandoer, og installasjonsdelen (`kobling-install.sh`, inkludert `kobling-update`) er kjørt i en ren Ubuntu 24.04-container. «Oppdater nå» er kjørt uten systemd. Brukeren `kobling` la forespørselen, og `kobling-update --request` hentet taggen fra et git-repo, bygde og skrev versjonen og `status.json`. En tagg som ikke finnes ga `ok:false` uten å røre installasjonen. At `kobling-update.path` faktisk starter jobben, er ikke testet, fordi systemd ikke kjører her. Det Docker-baserte `install.sh` er bare syntakssjekket.
 - **Debian trixie-imaget:** Docker-imaget er testet med Ubuntu 24.04 som grunnimage, fordi Debian-speilene ikke var tilgjengelige her. Standardimaget (Debian trixie) bygges i CI.

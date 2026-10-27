@@ -111,6 +111,21 @@ test('dokument, invitasjon og tilgang', async () => {
   assert.equal((await app.inject({ method: 'GET', url: '/api/docs/' + docId, headers: H(userTok) })).json().role, 'Kan lese');
 });
 
+test('delingslenker og invitasjoner bruker DuckDNS-adressen når den er på', async () => {
+  const put = duck => app.inject({ method: 'PUT', url: '/api/admin/settings', headers: H(adminTok), payload: { duck } });
+  const link = async () => (await app.inject({ method: 'GET', url: `/api/docs/${docId}/people`, headers: H(adminTok) })).json().link;
+  const inviteUrl = async () => (await app.inject({ method: 'POST', url: `/api/docs/${docId}/invites`, headers: H(adminTok), payload: { email: 'lenke@test.no', sendMail: false } })).json().url;
+  assert.deepEqual(await link(), { url: 'https://kob.test', ext: false });
+  await put({ on: true, domain: 'mitt-navn', tls: true, links: true });
+  assert.deepEqual(await link(), { url: 'https://mitt-navn.duckdns.org:8443', ext: true });
+  assert.match(await inviteUrl(), /^https:\/\/mitt-navn\.duckdns\.org:8443\/i\//);
+  await put({ tls: false });
+  assert.equal((await link()).url, 'http://mitt-navn.duckdns.org:8080');
+  await put({ links: false });
+  assert.match(await inviteUrl(), /^https:\/\/kob\.test\/i\//);
+  await put({ on: false, links: true });
+});
+
 test('kompilering krever innlogging og gir PDF eller feil med linjenummer', async () => {
   const tex = '\\documentclass{article}\\begin{document}x\\end{document}';
   assert.equal((await app.inject({ method: 'POST', url: '/api/compile', payload: { tex } })).statusCode, 401);

@@ -89,6 +89,9 @@ import {
   lintTex,
   ACCOUNTS,
   ADMIN_TABS,
+  DEF_UPD,
+  RELEASES,
+  vcmp,
   DEF_SMTP,
   PROTON_FREE,
   SMTP_PRESETS,
@@ -277,6 +280,7 @@ export default class Component extends DCLogic {
     backups: (SAVED && SAVED.backups) || [],
     codeEdit: null,
     rightW: (SAVED && SAVED.rightW) || 500,
+    sideHidden: !!(SAVED && SAVED.sideHidden),
     recent: (SAVED && SAVED.recent) || ['d4', 'd3', 'd2'],
     fileMenu: false,
     hover: null,
@@ -294,6 +298,8 @@ export default class Component extends DCLogic {
     sendMsg: '',
     sendErr: '',
     att: { pdf: true, tex: false, img: false },
+    upd: { ...DEF_UPD, ...((SAVED && SAVED.upd) || {}) },
+    updUi: { checking: false, found: null, run: null },
     smtp: { ...DEF_SMTP, ...((SAVED && SAVED.smtp) || {}) },
     smtpUi: { showPass: false, test: null, testing: false }
   };
@@ -398,7 +404,9 @@ export default class Component extends DCLogic {
       'recent',
       'mails',
       'smtp',
-      'me'
+      'me',
+      'sideHidden',
+      'upd'
     ];
     if (K.some(k => ps[k] !== this.state[k])) {
       clearTimeout(this._sv);
@@ -477,6 +485,17 @@ export default class Component extends DCLogic {
       this.compile();
       return;
     }
+    if (m && (k === 'z' || k === 'y') && !typing) {
+      e.preventDefault();
+      if (k === 'y' || e.shiftKey) this.redo();
+      else this.undo();
+      return;
+    }
+    if (m && e.key === '\\') {
+      e.preventDefault();
+      this.setState(x => ({ sideHidden: !x.sideHidden, hover: null }));
+      return;
+    }
     if (m && k === 'e' && s.view === 'editor') {
       e.preventDefault();
       this.openPicker('qty');
@@ -508,6 +527,7 @@ export default class Component extends DCLogic {
       return;
     }
     if (e.key === 'Escape') {
+      if (s.restore) return this.setState({ restore: null });
       if (s.profileOpen) return this.setState({ profileOpen: false });
       if (s.fileMenu) return this.setState({ fileMenu: false });
       if (s.picker) return this.setState({ picker: null });
@@ -615,7 +635,66 @@ export default class Component extends DCLogic {
         }, 30)
     );
   }
+  snapDoc(d) {
+    return clone({
+      title: d.title,
+      authors: d.authors,
+      group: d.group,
+      pre: d.pre || [],
+      blocks: d.blocks,
+      files: d.files || []
+    });
+  }
+  urStack(kind) {
+    if (kind === 'circ') return this._uc || (this._uc = { past: [], future: [], t: 0 });
+    const m = this._ud || (this._ud = {});
+    return m[this.state.cur] || (m[this.state.cur] = { past: [], future: [], t: 0 });
+  }
+  pushUndo(kind, snap, force) {
+    const st = this.urStack(kind),
+      t = Date.now();
+    if (!force && st.past.length && t - st.t < 450) {
+      st.t = t;
+      return;
+    }
+    st.past.push(snap);
+    if (st.past.length > 200) st.past.shift();
+    st.future = [];
+    st.t = t;
+    this.setState({ urTick: t });
+  }
+  urKind() {
+    return this.state.view === 'circuit' && this.state.circ ? 'circ' : 'doc';
+  }
+  undo = () => this.stepUR(true);
+  redo = () => this.stepUR(false);
+  stepUR(back) {
+    const kind = this.urKind(),
+      st = this.urStack(kind),
+      from = back ? st.past : st.future,
+      to = back ? st.future : st.past;
+    if (!from.length) return this.toast(back ? 'Ingenting å angre' : 'Ingenting å gjøre om');
+    const snap = from.pop();
+    st.t = 0;
+    if (kind === 'circ') {
+      to.push(clone(this.state.circ.data));
+      this.setState(s => ({ circ: { ...s.circ, data: snap, sel: null, pending: null }, urTick: Date.now() }));
+    } else {
+      to.push(this.snapDoc(this.curDoc()));
+      this.setState(
+        s => ({
+          docs: s.docs.map(d => (d.id === s.cur ? { ...d, ...snap } : d)),
+          codeDraft: null,
+          codeErr: null,
+          urTick: Date.now()
+        }),
+        () => this.schedule()
+      );
+    }
+    this.toast(back ? 'Angret' : 'Gjort om');
+  }
   setDoc(fn, hist) {
+    this.pushUndo('doc', this.snapDoc(this.curDoc()), !!hist);
     this.setState(
       s => {
         const old = s.docs.find(d => d.id === s.cur);
@@ -691,7 +770,29 @@ export default class Component extends DCLogic {
       this.pendingFocus = { sel: `[data-seg="${prev.id}:${prev.type === 'p' ? prev.segs.length - 1 : 0}"]`, end: true };
   }
   paraKey(e, b, i) {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (e.key === 'Enter' && !e.shiftKey && !e.metaKey && !e.ctrlKey) {
+      e.preventDefault();
+      const el = e.currentTarget,
+        sel = window.getSelection();
+      if (!sel || !sel.rangeCount) return;
+      const r = sel.getRangeAt(0);
+      r.deleteContents();
+      const atEnd = (() => {
+        const t = document.createRange();
+        t.selectNodeContents(el);
+        t.setStart(r.endContainer, r.endOffset);
+        return !t.toString().length;
+      })();
+      const tn = document.createTextNode(atEnd && !/\n$/.test(el.innerText) ? '\n\u200B' : '\n');
+      r.insertNode(tn);
+      const nr = document.createRange();
+      nr.setStart(tn, 1);
+      nr.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(nr);
+      return;
+    }
+    if (e.key === 'Enter') {
       e.preventDefault();
       this.saveSeg(b.id, i, e.currentTarget.innerText);
       this.addBlockAfter(b.id, { type: 'p', segs: [t('')] });
@@ -780,6 +881,7 @@ export default class Component extends DCLogic {
     else this.insertSeg(seg, 'Satt inn ' + label);
   };
   openCircuit(id, partial) {
+    this._uc = { past: [], future: [], t: 0 };
     const b = partial || this.findBlock(id);
     this.setState({
       view: 'circuit',
@@ -796,7 +898,11 @@ export default class Component extends DCLogic {
     });
   }
   circSet(p) {
-    this.setState(s => ({ circ: { ...s.circ, ...(typeof p === 'function' ? p(s.circ) : p) } }));
+    const c = this.state.circ;
+    if (!c) return;
+    const res = typeof p === 'function' ? p(c) : p;
+    if (res && res.data && res.data !== c.data) this.pushUndo('circ', clone(c.data));
+    this.setState(s => ({ circ: { ...s.circ, ...res } }));
   }
   updData(fn) {
     this.circSet(c => ({ data: fn(c.data) }));
@@ -984,6 +1090,268 @@ export default class Component extends DCLogic {
       this.toast(ok ? d.domain + '.duckdns.org peker nå på ' + ip : 'DuckDNS svarte KO. Sjekk subdomene og token.');
     }, 750);
   };
+  smbFsDefault() {
+    return {
+      backup: { kobling: {}, proxmox: { dump: {} }, unraid: {} },
+      appdata: { kobling: { data: {} }, plex: {}, nextcloud: {} },
+      Public: { Dokumenter: {}, Skole: { ELI1300: {} } },
+      isos: {}
+    };
+  }
+  smbConnect = () => {
+    const b = this.state.smb,
+      u = this.state.smbUi;
+    if (u.conn && u.conn.ok) {
+      return this.sbu({ conn: null, cwd: [], newDir: '' });
+    }
+    const host = b.host.trim();
+    if (!host) return this.sbu({ conn: { err: 'Skriv inn IP-adressen eller vertsnavnet til serveren.' } });
+    const ip = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(host);
+    if (ip && ip.slice(1).some(n => +n > 255)) return this.sbu({ conn: { err: 'Ugyldig IP-adresse.' } });
+    if (!ip && !/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9-]+)*$/i.test(host))
+      return this.sbu({ conn: { err: 'Ugyldig vertsnavn.' } });
+    if (!b.user.trim()) return this.sbu({ conn: { err: 'Fyll inn brukernavn.' } });
+    this.sbu({ conn: { busy: true } });
+    setTimeout(() => {
+      if (
+        ip &&
+        !(
+          +ip[1] === 10 ||
+          (+ip[1] === 192 && +ip[2] === 168) ||
+          (+ip[1] === 172 && +ip[2] >= 16 && +ip[2] <= 31) ||
+          +ip[1] === 127
+        )
+      )
+        return this.sbu({
+          conn: { err: 'Fikk ikke kontakt med ' + host + ' på port 445. Er serveren på samme nettverk?' }
+        });
+      if (!b.pass) return this.sbu({ conn: { err: 'Feil brukernavn eller passord (NT_STATUS_LOGON_FAILURE).' } });
+      const fs = (this.state.smbFs || {})[host] || this.smbFsDefault();
+      const cwd =
+        b.share && fs[b.share]
+          ? [
+              b.share,
+              ...(b.path || '')
+                .split('/')
+                .filter(Boolean)
+                .filter((x, i, a) => {
+                  let n = fs[b.share];
+                  for (let k = 0; k <= i; k++) {
+                    n = n && n[a[k]];
+                  }
+                  return !!n;
+                })
+            ]
+          : [];
+      this.setState(s => ({
+        smbFs: { ...(s.smbFs || {}), [host]: fs },
+        smbUi: { ...s.smbUi, conn: { ok: true, host }, cwd, newDir: '' }
+      }));
+    }, 700);
+  };
+  smbNode(cwd) {
+    const u = this.state.smbUi,
+      fs = (this.state.smbFs || {})[u.conn && u.conn.host];
+    let n = fs;
+    for (const p of cwd) {
+      n = n && n[p];
+    }
+    return n;
+  }
+  smbMkdir = () => {
+    const u = this.state.smbUi,
+      name = (u.newDir || '').trim();
+    if (!name || !u.cwd.length) return;
+    if (/[\\/:*?"<>|]/.test(name)) return this.toast('Ugyldige tegn i mappenavnet');
+    const host = u.conn.host;
+    this.setState(s => {
+      const fs = clone(s.smbFs[host]);
+      let n = fs;
+      for (const p of s.smbUi.cwd) n = n[p];
+      if (n[name]) return null;
+      n[name] = {};
+      return { smbFs: { ...s.smbFs, [host]: fs }, smbUi: { ...s.smbUi, newDir: '', cwd: [...s.smbUi.cwd, name] } };
+    });
+    this.toast('Opprettet mappen ' + name);
+  };
+  smbRow(bk, bu) {
+    const c = bu.conn || {},
+      ok = !!c.ok,
+      cwd = bu.cwd || [],
+      node = ok ? this.smbNode(cwd) : null,
+      host = bk.host.trim();
+    const sv = p => this.sb(p),
+      ACCX = 'oklch(0.55 0.17 255)',
+      GR = 'var(--acc-g,#138a36)';
+    const FOLDER = 'M2.5 5.5v8.25h13V6.75H8.5L7 5.25H2.5z',
+      SHARE = 'M3 4.5h12v4H3zM3 9.5h12v4H3zM5.5 6.5h.01M5.5 11.5h.01';
+    const entries =
+      ok && node
+        ? Object.keys(node)
+            .sort((a, b) => a.localeCompare(b, 'nb'))
+            .map(k => ({
+              name: k,
+              meta: cwd.length ? (Object.keys(node[k]).length ? Object.keys(node[k]).length + ' mapper' : '') : 'share',
+              icon: cwd.length ? FOLDER : SHARE,
+              iconColor: cwd.length ? 'oklch(0.7 0.13 75)' : ACCX,
+              onOpen: () => this.sbu({ cwd: [...cwd, k], newDir: '' })
+            }))
+        : [];
+    const path = '//' + (c.host || host) + (cwd.length ? '/' + cwd.join('/') : '');
+    const target =
+      bk.host && bk.share ? '//' + bk.host + '/' + bk.share + (bk.path ? '/' + bk.path : '') : 'Ikke valgt ennå';
+    const sameAsSaved =
+      cwd.length && bk.host === c.host && bk.share === cwd[0] && (bk.path || '') === cwd.slice(1).join('/');
+    return {
+      isSmb: true,
+      host: bk.host,
+      user: bk.user,
+      pass: bk.pass,
+      domain: bk.domain,
+      passType: bu.showPass ? 'text' : 'password',
+      eyeLabel: bu.showPass ? 'Skjul' : 'Vis',
+      onEye: () => this.sbu({ showPass: !bu.showPass }),
+      onHost: e => {
+        sv({ host: e.target.value.trim() });
+        if (ok) this.sbu({ conn: null, cwd: [] });
+      },
+      onUser: e => sv({ user: e.target.value }),
+      onPass: e => sv({ pass: e.target.value }),
+      onDomain: e => sv({ domain: e.target.value }),
+      onEnter: e => {
+        if (e.key === 'Enter') this.smbConnect();
+      },
+      adv: !!bu.adv,
+      advLabel: bu.adv ? 'Skjul avansert' : 'Avansert',
+      toggleAdv: () => this.sbu({ adv: !bu.adv }),
+      vers: [
+        ['2.1', '2.1'],
+        ['3.0', '3.0'],
+        ['3.1.1', '3.1.1']
+      ].map(([l, v]) => ({
+        label: l,
+        onClick: () => sv({ ver: v }),
+        bg: bk.ver === v ? 'var(--kfff,#fff)' : 'transparent',
+        shadow: bk.ver === v ? '0 1px 2px rgba(0,0,0,.1)' : 'none'
+      })),
+      onConnect: this.smbConnect,
+      connLabel: c.busy ? 'Kobler til …' : ok ? 'Koble fra' : 'Koble til',
+      connOpacity: c.busy ? 0.6 : 1,
+      err: c.err || '',
+      status: ok ? 'Tilkoblet ' + c.host + ' · SMB ' + bk.ver : '',
+      statusColor: 'var(--acc-g-ink,#0f6e2b)',
+      s1Bg: ok ? GR : ACCX,
+      s1Mark: ok ? '✓' : '1',
+      s2Bg: ok ? ACCX : 'var(--kbdb7ae,#bdb7ae)',
+      s2Opacity: ok ? 1 : 0.55,
+      connected: ok,
+      notConnected: !ok,
+      crumbs: [
+        { label: '//' + (c.host || host), sep: '', fw: cwd.length ? 400 : 600, onClick: () => this.sbu({ cwd: [] }) },
+        ...cwd.map((p, i) => ({
+          label: p,
+          sep: '/',
+          fw: i === cwd.length - 1 ? 600 : 400,
+          onClick: () => this.sbu({ cwd: cwd.slice(0, i + 1) })
+        }))
+      ],
+      goUp: () => cwd.length && this.sbu({ cwd: cwd.slice(0, -1) }),
+      upOpacity: cwd.length ? 1 : 0.35,
+      entries,
+      empty: ok && !entries.length,
+      emptyText: cwd.length ? 'Mappen er tom. Opprett en undermappe, eller bruk denne mappen.' : 'Fant ingen sharer.',
+      canMkdir: ok && cwd.length > 0,
+      newDir: bu.newDir || '',
+      onNewDir: e => this.sbu({ newDir: e.target.value }),
+      onNewDirKey: e => {
+        if (e.key === 'Enter') this.smbMkdir();
+      },
+      mkdir: this.smbMkdir,
+      pickHint: cwd.length ? 'Gjeldende mappe' : 'Velg en share for å fortsette',
+      cwdPath: path,
+      useLabel: sameAsSaved ? '✓ Valgt' : 'Bruk denne mappen',
+      useOpacity: cwd.length && !sameAsSaved ? 1 : 0.45,
+      onUse: () => {
+        if (!cwd.length || sameAsSaved) return;
+        sv({ host: c.host, share: cwd[0], path: cwd.slice(1).join('/') });
+        this.toast('Backup lagres i ' + path);
+      },
+      target,
+      targetColor: bk.host && bk.share ? 'var(--k1f1e1c,#1f1e1c)' : 'var(--k8d8982,#8d8982)'
+    };
+  }
+  publicBase() {
+    const d = this.state.duck,
+      dep = this.state.deploy;
+    if (d.on && d.links !== false && d.domain && DUCK_RE.test(d.domain))
+      return {
+        url: d.tls ? 'https://' + d.domain + '.duckdns.org' : 'http://' + d.domain + '.duckdns.org:' + dep.port,
+        ext: true
+      };
+    const sv = (this.state.settings.server || 'https://kobling.app').trim();
+    return { url: /^https?:\/\//.test(sv) ? sv.replace(/\/$/, '') : 'https://' + sv, ext: false };
+  }
+  up(p) {
+    this.setState(s => ({ upd: { ...s.upd, ...p } }));
+  }
+  uu(p) {
+    this.setState(s => ({ updUi: { ...s.updUi, ...p } }));
+  }
+  checkUpdate = () => {
+    this.uu({ checking: true, found: null });
+    setTimeout(() => {
+      const u = this.state.upd,
+        r = RELEASES[u.channel];
+      const d = new Date();
+      this.up({ lastCheck: d.toLocaleDateString('nb-NO') + ' kl. ' + now() });
+      this.uu({ checking: false, found: vcmp(r.ver, u.ver) > 0 ? r : 'none' });
+    }, 900);
+  };
+  runUpdate = (target, isRollback) => {
+    const u = this.state.upd,
+      b = this.state.smb,
+      hasBk = u.backup && b.host && b.share && !isRollback;
+    const to = target || this.state.updUi.found;
+    if (!to || to === 'none') return;
+    const steps = [
+      ...(u.notify ? ['Varsler innloggede brukere …'] : []),
+      'Laster ned kobling-server:' + to.ver + ' (' + (to.size || '') + ') …',
+      ...(hasBk ? ['Tar backup til //' + b.host + '/' + b.share + '/' + b.path + ' …'] : []),
+      'Stopper tjenesten (aktive økter lagres) …',
+      'Migrerer database …',
+      'Starter kobling-server ' + to.ver + ' …',
+      'Helsesjekk: /api/health …'
+    ];
+    let i = 0,
+      pct = 0;
+    const log = [];
+    this.uu({ run: { pct: 0, step: steps[0], log: [] } });
+    clearInterval(this._ut);
+    this._ut = setInterval(() => {
+      pct += 4 + Math.random() * 7;
+      const si = Math.min(steps.length - 1, Math.floor((pct / 100) * steps.length));
+      while (i < si) {
+        log.push('✓ ' + steps[i].replace(' …', ''));
+        i++;
+      }
+      if (pct >= 100) {
+        clearInterval(this._ut);
+        log.push('✓ ' + steps[steps.length - 1].replace(' …', ''));
+        const prev = u.ver;
+        if (hasBk) {
+          this.setState(s => ({ backups: [this.snapshotBackup('_for-oppdatering-' + to.ver), ...s.backups] }));
+        }
+        this.up({ ver: to.ver, built: to.date || u.built, prev: isRollback ? null : prev });
+        this.uu({
+          run: { pct: 100, done: true, step: 'Ferdig', log, to: to.ver, rollback: !!isRollback },
+          found: null
+        });
+        this.toast(isRollback ? 'Tilbake på ' + to.ver : 'Serveren er oppdatert til ' + to.ver);
+        return;
+      }
+      this.uu({ run: { pct, step: steps[si], log: [...log] } });
+    }, 200);
+  };
   smbErr() {
     const b = this.state.smb;
     if (!b.host) return 'Fyll inn server (vertsnavn eller IP).';
@@ -1046,6 +1414,138 @@ export default class Component extends DCLogic {
         this.toast('Backup fullført');
       } else this.sbu({ run: { pct, step: steps[Math.min(3, Math.floor(pct / 25))] } });
     }, 170);
+  };
+  bkFileRef = React.createRef();
+  snapshotBackup(suffix) {
+    const d = new Date(),
+      docs = clone(this.state.docs);
+    return {
+      id: uid(),
+      name: 'kobling-' + d.toISOString().slice(0, 10) + '_' + now().replace(':', '') + (suffix || '') + '.tar.zst',
+      time: now(),
+      date: d.toLocaleDateString('nb-NO'),
+      size: Math.round((JSON.stringify(docs).length / 1024) * 0.32) + ' kB',
+      files: docs.length,
+      docs
+    };
+  }
+  openRestore(k) {
+    this.setState({
+      restore: { id: k.id, mode: 'merge', sel: Object.fromEntries(k.docs.map(d => [d.id, true])), safety: true }
+    });
+  }
+  doRestore() {
+    const r = this.state.restore,
+      k = this.state.backups.find(x => x.id === r.id);
+    if (!k) return;
+    const pick = k.docs.filter(d => r.sel[d.id]);
+    if (!pick.length) return;
+    const safe = r.safety ? [this.snapshotBackup('_for-gjenoppretting')] : [];
+    this.setState(
+      s => {
+        let docs;
+        if (r.mode === 'replace') docs = clone(pick);
+        else {
+          docs = s.docs.map(d => {
+            const b = pick.find(x => x.id === d.id);
+            return b ? clone(b) : d;
+          });
+          pick.forEach(b => {
+            if (!docs.some(d => d.id === b.id)) docs.push(clone(b));
+          });
+        }
+        const cur = docs.some(d => d.id === s.cur) ? s.cur : docs[0].id;
+        const old = s.docs.find(d => d.id === s.cur);
+        return {
+          restore: null,
+          backups: [...safe, ...s.backups],
+          docs,
+          pdfSnap: null,
+          active: null,
+          codeDraft: null,
+          cur,
+          history: [
+            {
+              id: uid(),
+              who: 'Sebastian Kristoffersen',
+              initials: 'SK',
+              color: USERS.SK.color,
+              what: 'Gjenopprettet ' + pick.length + ' dok. fra ' + k.name,
+              time: now(),
+              snap: old ? clone(old.blocks) : null
+            },
+            ...s.history
+          ]
+        };
+      },
+      () => this.compile()
+    );
+    this.toast(
+      (r.mode === 'replace'
+        ? 'Erstattet alt med '
+        : 'Gjenopprettet ' + pick.length + ' dokument' + (pick.length > 1 ? 'er' : '') + ' fra ') + k.name
+    );
+  }
+  fetchBackups = () => {
+    const b = this.state.smb;
+    if (!b.host || !b.share) return this.toast('Fyll inn server og share først');
+    this.setState({ fetchingBk: true });
+    setTimeout(() => {
+      const ds = [1, 2, 7, 14].map(n => {
+        const d = new Date(Date.now() - n * 864e5);
+        const docs = clone(this.state.docs).map(x => ({
+          ...x,
+          blocks: x.blocks.slice(0, Math.max(1, x.blocks.length - n))
+        }));
+        return {
+          id: 'r' + n + '-' + d.toISOString().slice(0, 10),
+          remote: true,
+          name: 'kobling-' + d.toISOString().slice(0, 10) + '_0300.tar.zst',
+          time: '03:00',
+          date: d.toLocaleDateString('nb-NO'),
+          size: Math.round((JSON.stringify(docs).length / 1024) * 0.32) + ' kB',
+          files: docs.length,
+          docs
+        };
+      });
+      this.setState(s => ({
+        fetchingBk: false,
+        backups: [...s.backups.filter(x => !x.remote), ...ds.filter(x => !s.backups.some(y => y.id === x.id))].sort(
+          (a, c) => c.name.localeCompare(a.name)
+        )
+      }));
+      this.toast('Fant ' + ds.length + ' backuper på //' + b.host + '/' + b.share);
+    }, 900);
+  };
+  onBackupFile = e => {
+    const f = e.target.files && e.target.files[0];
+    e.target.value = '';
+    if (!f) return;
+    const rd = new FileReader();
+    rd.onload = () => {
+      try {
+        let docs = JSON.parse(rd.result);
+        if (docs && docs.docs) docs = docs.docs;
+        if (!Array.isArray(docs) || !docs.every(d => d && d.id && Array.isArray(d.blocks))) throw 0;
+        const k = {
+          id: uid(),
+          name: f.name,
+          time: now(),
+          date: new Date().toLocaleDateString('nb-NO'),
+          size: Math.round(f.size / 1024) + ' kB',
+          files: docs.length,
+          docs,
+          fromFile: true
+        };
+        this.setState(
+          s => ({ backups: [k, ...s.backups] }),
+          () => this.openRestore(k)
+        );
+      } catch (err) {
+        this.toast('Filen er ikke en gyldig Kobling-backup');
+      }
+    };
+    rd.readAsText(f);
   };
   restoreBackup(k) {
     this.setState(
@@ -1334,6 +1834,144 @@ export default class Component extends DCLogic {
     if (files.length < all.length) this.toast('Hoppet over filer som ikke er bilder');
     this.addToLib(files);
   };
+  startBlkDrag(e, id) {
+    if (e.button !== undefined && e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const box = this.edRef.current;
+    let moved = false,
+      sx = e.clientX,
+      sy = e.clientY,
+      raf = null,
+      lastY = sy;
+    const scroll = () => {
+      if (!box) return;
+      const r = box.getBoundingClientRect();
+      const d = lastY < r.top + 50 ? -14 : lastY > r.bottom - 50 ? 14 : 0;
+      if (d) {
+        box.scrollTop += d;
+        raf = requestAnimationFrame(scroll);
+      } else raf = null;
+    };
+    const move = ev => {
+      if (!moved && Math.hypot(ev.clientX - sx, ev.clientY - sy) < 4) return;
+      if (!moved) {
+        moved = true;
+        document.body.style.cursor = 'grabbing';
+        document.body.style.userSelect = 'none';
+        this.setState({ dragging: id });
+      }
+      lastY = ev.clientY;
+      if (!raf) raf = requestAnimationFrame(scroll);
+      const el = document.elementFromPoint(ev.clientX, ev.clientY),
+        bk = el && el.closest && el.closest('[data-blk]');
+      let at = null;
+      if (bk && bk.dataset.blk !== id) {
+        const r = bk.getBoundingClientRect();
+        at = { bid: bk.dataset.blk, after: ev.clientY > r.top + r.height / 2 };
+      } else if (!bk && box && box.contains(el)) {
+        const bs = this.curDoc().blocks,
+          l = bs[bs.length - 1];
+        if (l && l.id !== id) {
+          const le = box.querySelector('[data-blk="' + l.id + '"]');
+          if (le && ev.clientY > le.getBoundingClientRect().bottom) at = { bid: l.id, after: true };
+        }
+      }
+      const c = this.state.dropAt;
+      if (!c !== !at || (c && (c.bid !== at.bid || c.after !== at.after))) this.setState({ dropAt: at });
+    };
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      window.removeEventListener('pointercancel', up);
+      if (raf) cancelAnimationFrame(raf);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      const at = this.state.dropAt;
+      this.setState({ dropAt: null, dragging: null });
+      if (!moved || !at) return;
+      const bs = this.curDoc().blocks,
+        i = bs.findIndex(b => b.id === at.bid);
+      let after = at.after ? at.bid : i > 0 ? bs[i - 1].id : '__start';
+      if (after === id) return;
+      if (!at.after && i > 0 && bs[i - 1].id === id) return;
+      this.moveBlock(id, after);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', up);
+  }
+  startRename(kind, id, cur) {
+    this.unhover();
+    this.setState({ renaming: { kind, id, val: cur, err: '' } });
+  }
+  commitRename() {
+    const r = this.state.renaming;
+    if (!r) return;
+    let v = (r.val || '').trim();
+    const doc = this.curDoc();
+    const fail = err => this.setState(s => ({ renaming: { ...s.renaming, err } }));
+    if (!v) return this.setState({ renaming: null });
+    if (/[\\/:*?"<>|]/.test(v)) return fail('Ugyldige tegn: \\ / : * ? " < > |');
+    const reLit = x => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    if (r.kind === 'fig') {
+      const b = doc.blocks.find(x => x.id === r.id);
+      if (!b) return this.setState({ renaming: null });
+      const base = slug(v.replace(/\.kob$/i, ''));
+      if (!base) return fail('Navnet må ha bokstaver eller tall.');
+      const nl = 'fig:' + base;
+      if (nl === b.label) return this.setState({ renaming: null });
+      if (doc.blocks.some(x => x.label === nl)) return fail('Navnet er allerede i bruk.');
+      const ol = b.label,
+        rx = new RegExp('(\\\\(?:c|C)?ref\\{[^}]*?)' + reLit(ol) + '(?=[,}])', 'g');
+      this.setBlocks(
+        bs =>
+          bs.map(x =>
+            x.id === b.id
+              ? { ...x, label: nl }
+              : x.type === 'p'
+                ? { ...x, segs: x.segs.map(sg => (sg.t === 'ref' && sg.target === ol ? { ...sg, target: nl } : sg)) }
+                : x.type === 'raw'
+                  ? { ...x, src: (x.src || '').replace(rx, '$1' + nl) }
+                  : x
+          ),
+        'Ga nytt navn: figurer/' + base + '.kob'
+      );
+      this.setState({ renaming: null, codeDraft: null });
+      return this.toast('Omdøpt til figurer/' + base + '.kob · referanser er oppdatert');
+    }
+    const old =
+      r.kind === 'img'
+        ? (doc.blocks.find(x => x.id === r.id) || {}).file
+        : ((doc.files || []).find(x => x.id === r.id) || {}).file;
+    if (!old) return this.setState({ renaming: null });
+    const ext = (old.match(/\.[a-z0-9]+$/i) || [''])[0];
+    if (!/\.[a-z0-9]+$/i.test(v)) v += ext;
+    if (v === old) return this.setState({ renaming: null });
+    const taken = new Set(
+      [...(doc.files || []).map(x => x.file), ...doc.blocks.filter(x => x.type === 'img').map(x => x.file)].filter(
+        x => x !== old
+      )
+    );
+    if (taken.has(v)) return fail('Det finnes allerede en fil som heter ' + v + '.');
+    const rx = new RegExp('(\\\\includegraphics(?:\\[[^\\]]*\\])?\\{(?:bilder/)?)' + reLit(old) + '\\}', 'g');
+    this.setDoc(
+      d => ({
+        ...d,
+        files: (d.files || []).map(x => (x.file === old ? { ...x, file: v } : x)),
+        blocks: d.blocks.map(x =>
+          x.type === 'img' && x.file === old
+            ? { ...x, file: v }
+            : x.type === 'raw'
+              ? { ...x, src: (x.src || '').replace(rx, '$1' + v + '}') }
+              : x
+        )
+      }),
+      'Ga nytt navn: bilder/' + v
+    );
+    this.setState({ renaming: null, codeDraft: null });
+    this.toast('Omdøpt til bilder/' + v);
+  }
   pickImage(target) {
     this.fileTarget = target;
     const el = this.fileRef.current;
@@ -1545,8 +2183,7 @@ export default class Component extends DCLogic {
   mailtoDoc = () => {
     const s = this.state,
       doc = this.curDoc();
-    const url =
-      'https://' + (this.state.settings.server || 'kobling.app').replace(/^https?:\/\//, '') + '/d/' + slug(doc.title);
+    const url = this.publicBase().url + '/d/' + slug(doc.title);
     const body =
       (s.sendMsg ? s.sendMsg + '\n\n' : '') +
       'Dokumentet: ' +
@@ -1660,6 +2297,22 @@ export default class Component extends DCLogic {
       stop: e => e.stopPropagation()
     };
     v.themeAttr = themeAttr;
+    {
+      const st = this.urStack(this.urKind());
+      v.showUR = s.view === 'editor' || s.view === 'circuit';
+      v.undo = this.undo;
+      v.redo = this.redo;
+      v.undoOp = st.past.length ? 1 : 0.35;
+      v.redoOp = st.future.length ? 1 : 0.35;
+      v.undoTitle = 'Angre (' + MOD + 'Z)';
+      v.redoTitle = 'Gjør om (' + (s.platform === 'mac' ? '⇧⌘Z' : 'Ctrl+Y') + ')';
+    }
+    v.showSide = !s.sideHidden;
+    v.toggleSide = () => this.setState(x => ({ sideHidden: !x.sideHidden, hover: null }));
+    v.sideTitle = (s.sideHidden ? 'Vis' : 'Skjul') + ' sidepanel (' + MOD + '\\)';
+    v.sideBtnColor = s.sideHidden ? 'var(--k8d8982,#8d8982)' : 'var(--k3d3a36,#3d3a36)';
+    v.sideBtnBg = 'transparent';
+    v.sideFill = s.sideHidden ? '' : 'M3.5 4.25h2.75v9.5H3.5z';
     v.showDocCrumb = s.view !== 'projects';
     v.crumbRoot = doc.folder.split(' · ')[0] + ' / ' + (doc.folder.split(' · ')[1] || '');
     v.url =
@@ -1784,6 +2437,77 @@ export default class Component extends DCLogic {
     v.splitLabel = s.mode === 'visual' ? 'Vis kode ⌥⌘L' : 'Skjul kode ⌥⌘L';
     v.toast = s.toast;
     v.hasToast = !!s.toast;
+    {
+      const r = s.restore,
+        k = r && s.backups.find(x => x.id === r.id);
+      v.restoreOpen = !!k;
+      v.stopClick = e => e.stopPropagation();
+      v.closeRestore = () => this.setState({ restore: null });
+      if (k) {
+        const set = p => this.setState(x => ({ restore: { ...x.restore, ...p } })),
+          n = k.docs.filter(d => r.sel[d.id]).length,
+          all = n === k.docs.length,
+          on = 'oklch(0.55 0.17 255)';
+        v.rs = {
+          name: k.name,
+          meta:
+            k.date +
+            ' ' +
+            k.time +
+            ' · ' +
+            k.size +
+            ' · ' +
+            k.files +
+            ' dokumenter' +
+            (k.remote ? ' · fra sharen' : k.fromFile ? ' · fra fil' : ''),
+          modes: [
+            ['Slå sammen', 'merge'],
+            ['Erstatt alt', 'replace']
+          ].map(([l, m]) => ({
+            label: l,
+            onClick: () => set({ mode: m }),
+            bg: r.mode === m ? 'var(--kfff,#fff)' : 'transparent',
+            shadow: r.mode === m ? '0 1px 2px rgba(0,0,0,.1)' : 'none'
+          })),
+          modeNote:
+            r.mode === 'merge'
+              ? 'Valgte dokumenter erstattes med versjonen i backupen. Dokumenter som ikke finnes lenger, legges tilbake. Resten beholdes.'
+              : 'Alle dokumenter på serveren erstattes med de valgte fra backupen. Dokumenter som ikke er valgt, forsvinner.',
+          allLabel: all ? 'Velg ingen' : 'Velg alle',
+          toggleAll: () => set({ sel: Object.fromEntries(k.docs.map(d => [d.id, !all])) }),
+          docs: k.docs.map(d => {
+            const ex = s.docs.find(x => x.id === d.id),
+              c = !!r.sel[d.id];
+            return {
+              title: d.title,
+              meta: (d.folder || '') + ' · ' + d.blocks.length + ' blokker',
+              check: c ? '✓' : '',
+              boxBg: c ? on : 'transparent',
+              boxBorder: c ? on : 'var(--kcfcac2,#cfcac2)',
+              tag: ex ? 'Finnes' : 'Slettet',
+              tagBg: ex ? 'var(--kf3f1ed,#f3f1ed)' : 'var(--koklch096003075,oklch(0.96 0.03 75))',
+              tagColor: ex ? 'var(--k6b6862,#6b6862)' : 'var(--k8a5310,#8a5310)',
+              onToggle: () => set({ sel: { ...r.sel, [d.id]: !c } })
+            };
+          }),
+          safeCheck: r.safety ? '✓' : '',
+          safeBg: r.safety ? on : 'transparent',
+          safeBorder: r.safety ? on : 'var(--kcfcac2,#cfcac2)',
+          toggleSafety: () => set({ safety: !r.safety }),
+          warn: !n
+            ? 'Velg minst ett dokument.'
+            : r.mode === 'replace' && !r.safety
+              ? 'Nåværende dokumenter kan ikke hentes tilbake.'
+              : '',
+          btnLabel: r.mode === 'replace' ? 'Erstatt alt' : 'Gjenopprett ' + n,
+          btnBg: n ? (r.mode === 'replace' ? 'var(--kb3261e,#b3261e)' : on) : 'var(--kcfcac2,#cfcac2)',
+          btnCursor: n ? 'pointer' : 'default',
+          onConfirm: () => {
+            if (n) this.doRestore();
+          }
+        };
+      } else v.rs = { modes: [], docs: [] };
+    }
 
     const nb = numberDoc(doc.blocks);
     const pres = {};
@@ -1823,7 +2547,8 @@ export default class Component extends DCLogic {
         ),
         macros: texMacros(doc.pre),
         files,
-        dec: S.dec
+        dec: S.dec,
+        fig: this._server ? this._server.figCtx(doc, S) : null
       };
     };
     const edCtx = texCtx0();
@@ -1972,6 +2697,8 @@ export default class Component extends DCLogic {
         e.dataTransfer.setData('application/x-kobling-blk', b.id);
         e.dataTransfer.effectAllowed = 'move';
       };
+      vm.onHandleDown = e => this.startBlkDrag(e, b.id);
+      vm.op = s.dragging === b.id ? 0.4 : 1;
       if (b.type === 'fig' || b.type === 'img') {
         vm.canSpan = S.cols === 2;
         vm.spanLabel = b.span ? '✓ Over begge spalter' : 'Over begge spalter';
@@ -2286,9 +3013,49 @@ export default class Component extends DCLogic {
         fw: s.active === b.id ? 600 : 400,
         onClick: () => this.focusBlock(b.id, 'outline')
       }));
+    const rn = s.renaming,
+      rnVm = (kind, id, dir, cur) => {
+        const ed = !!rn && rn.kind === kind && rn.id === id;
+        return {
+          isEditing: ed,
+          notEditing: !ed,
+          dir,
+          val: ed ? rn.val : cur,
+          err: ed ? rn.err : '',
+          hasErr: ed && !!rn.err,
+          stop: e => e.stopPropagation(),
+          onRename: e => {
+            if (e) {
+              e.stopPropagation();
+              e.preventDefault();
+            }
+            this.startRename(kind, id, cur);
+          },
+          onVal: e => this.setState(x => ({ renaming: { ...x.renaming, val: e.target.value, err: '' } })),
+          onKey: e => {
+            e.stopPropagation();
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              this.commitRename();
+            } else if (e.key === 'Escape') {
+              e.preventDefault();
+              this.setState({ renaming: null });
+            }
+          },
+          onCommit: () => this.commitRename(),
+          onSelectBase: e => {
+            const el = e.target,
+              dot = el.value.lastIndexOf('.');
+            try {
+              el.setSelectionRange(0, dot > 0 ? dot : el.value.length);
+            } catch (x) {}
+          }
+        };
+      };
     v.figFiles = doc.blocks
       .filter(b => b.type === 'fig')
       .map(b => ({
+        ...rnVm('fig', b.id, 'figurer/', b.label.replace('fig:', '') + '.kob'),
         label: 'figurer/' + b.label.replace('fig:', '') + '.kob',
         onClick: () => {
           this.unhover();
@@ -2301,6 +3068,7 @@ export default class Component extends DCLogic {
       doc.blocks
         .filter(b => b.type === 'img')
         .map(b => ({
+          ...rnVm('img', b.id, 'bilder/', b.file),
           label: 'bilder/' + b.file,
           onClick: () => {
             this.unhover();
@@ -2320,6 +3088,7 @@ export default class Component extends DCLogic {
       .filter(f => !usedImg.has(f.file))
       .map(f => ({
         unused: !usedRaw.has(f.file),
+        ...rnVm('lib', f.id, 'bilder/', f.file),
         label: 'bilder/' + f.file,
         onClick: () => {
           this.unhover();
@@ -2610,7 +3379,22 @@ export default class Component extends DCLogic {
     v.inviteErr = s.inviteErr;
     v.hasInviteErr = !!s.inviteErr;
     v.linkRole = s.linkRole;
-    v.shareUrl = 'kobling.app/d/' + slug(doc.title);
+    {
+      const pb = this.publicBase(),
+        me = ACCOUNTS.find(a => a.id === s.me) || ACCOUNTS[0];
+      v.shareFull = pb.url + '/d/' + slug(doc.title);
+      v.shareUrl = v.shareFull.replace(/^https?:\/\//, '');
+      v.linkExt = pb.ext;
+      v.linkLocal = !pb.ext;
+      v.linkNote = pb.ext
+        ? 'Ekstern adresse via DuckDNS. Fungerer utenfor hjemmenettet.'
+        : 'Lenken bruker serveradressen ' +
+          pb.url.replace(/^https?:\/\//, '') +
+          '. Slå på DuckDNS for å dele utenfor hjemmenettet.';
+      v.linkNoteAction = me.admin && !pb.ext ? 'Sett opp DuckDNS' : '';
+      v.hasLinkAction = !!v.linkNoteAction;
+      v.goDuck = () => this.setState({ view: 'settings', setTab: 'duck', share: false });
+    }
     v.copyLabel = s.copied ? 'Kopiert' : 'Kopier';
     v.onInvite = e => this.setState({ invite: e.target.value, inviteErr: '' });
     v.sendInvite = () => {
@@ -2650,7 +3434,7 @@ export default class Component extends DCLogic {
       if (mail) {
         const m = this.addMail({
           kind: 'invite',
-          link: 'https://' + (S.server || 'https://kobling.app').replace(/^https?:\/\//, '') + '/i/' + uid() + uid(),
+          link: this.publicBase().url + '/i/' + uid() + uid(),
           to: x,
           subject: 'Sebastian Kristoffersen har delt «' + doc.title + '» med deg',
           body: s.inviteMsg,
@@ -2729,7 +3513,8 @@ export default class Component extends DCLogic {
     v.mailOpen = !!mp;
     v.closeMail = () => this.setState({ mailPreview: null });
     if (mp) {
-      const host = (S.server || 'https://kobling.app').replace(/^https?:\/\//, '');
+      const pb = this.publicBase(),
+        host = pb.url.replace(/^https?:\/\//, '').replace(/:\d+$/, '');
       v.mp = {
         btn: mp.kind === 'invite' ? 'Godta invitasjon' : 'Åpne dokumentet',
         from: smtpFrom(s.smtp) || 'Kobling <noreply@' + host + '>',
@@ -2741,7 +3526,7 @@ export default class Component extends DCLogic {
         hasBody: !!mp.body,
         role: mp.role,
         docTitle: mp.docTitle,
-        url: mp.link || 'https://' + host + '/d/' + slug(mp.docTitle || ''),
+        url: mp.link || pb.url + '/d/' + slug(mp.docTitle || ''),
         att: (mp.att || []).join(', '),
         hasAtt: !!(mp.att && mp.att.length),
         status: mp.status + ' ' + mp.date + ' kl. ' + mp.time,
@@ -2766,7 +3551,7 @@ export default class Component extends DCLogic {
     v.onLinkRole = e => this.setState({ linkRole: e.target.value });
     v.copyLink = () => {
       try {
-        navigator.clipboard.writeText('https://' + v.shareUrl);
+        navigator.clipboard.writeText(v.shareFull);
       } catch (e) {}
       this.setState({ copied: true });
       setTimeout(() => this.setState({ copied: false }), 1600);
@@ -2862,7 +3647,51 @@ export default class Component extends DCLogic {
           this.deleteDoc(d.id);
         },
         border: d.id === s.cur ? ACCB : 'var(--ke2dfd9,#e2dfd9)',
-        cols: S.cols === 2 ? '1fr 1fr' : '1fr'
+        cols: S.cols === 2 ? '1fr 1fr' : '1fr',
+        authors: d.authors,
+        group: d.group,
+        colN: S.cols === 2 ? 2 : 1,
+        mini: (() => {
+          const nb2 = numberDoc(d.blocks),
+            out = [];
+          for (const b of d.blocks) {
+            if (out.length > 40) break;
+            if (b.type === 'abstract' && b.text) out.push({ isP: true, t: 'Sammendrag. ' + b.text });
+            else if (b.type === 'h1') out.push({ isH: true, fs: '3cqw', t: nb2.num[b.id] + '  ' + (b.text || '') });
+            else if (b.type === 'h2') out.push({ isH: true, fs: '2.6cqw', t: nb2.num[b.id] + '  ' + (b.text || '') });
+            else if (b.type === 'p') {
+              const tx = plain(b, dec);
+              if (tx.trim()) out.push({ isP: true, t: tx });
+            } else if (b.type === 'fig' || b.type === 'img')
+              out.push({ isBox: true, h: '16cqw', t: 'Figur ' + nb2.num[b.id] });
+            else if (b.type === 'table')
+              out.push({
+                isBox: true,
+                h: Math.min(30, 4 + b.rows.length * 2.4) + 'cqw',
+                t: b.style === 'list' ? 'Liste' : 'Tabell ' + nb2.num[b.id]
+              });
+            else if (b.type === 'eq') out.push({ isBox: true, h: '6cqw', t: '(' + nb2.num[b.id] + ')' });
+            else if (b.type === 'raw') {
+              const tx = (b.src || '')
+                .replace(/%.*$/gm, '')
+                .replace(/\\(begin|end)\{[^}]*\}(\{[^}]*\})?/g, '')
+                .replace(/\\(sub)*section\*?\{([^}]*)\}/g, '\n§$2\n')
+                .replace(/\\[a-zA-Z]+\*?(\[[^\]]*\])?/g, '')
+                .replace(/[{}$&\\]/g, ' ');
+              tx.split('\n')
+                .map(x => x.trim())
+                .filter(Boolean)
+                .slice(0, 12)
+                .forEach(x =>
+                  out.push(
+                    x[0] === '§' ? { isH: true, fs: '2.8cqw', t: x.slice(1) } : { isP: true, t: x.replace(/\s+/g, ' ') }
+                  )
+                );
+            }
+          }
+          if (!out.length) out.push({ isP: true, t: '' });
+          return out;
+        })()
       }));
     v.openNewProj = () => this.setState({ newProj: { title: '', tpl: 'rapport', err: '' } });
     v.closeNewProj = () => this.setState({ newProj: null });
@@ -3009,7 +3838,8 @@ export default class Component extends DCLogic {
               ['DuckDNS', 'duck'],
               ['Backup til SMB', 'backup'],
               ['E-post (SMTP)', 'smtp'],
-              ['Installer server', 'install']
+              ['Installer server', 'install'],
+              ['Oppdatering', 'update']
             ].map(tabItem)
           ]
         : [
@@ -3122,7 +3952,94 @@ export default class Component extends DCLogic {
           }
         )])
       ];
-    else if (TB === 'server')
+    else if (TB === 'update') {
+      const u = s.upd,
+        ui = s.updUi,
+        r = ui.run,
+        f = ui.found,
+        bkOk = bk.host && bk.share;
+      rows = [
+        {
+          isUpd: true,
+          ver: u.ver,
+          built: 'Bygget ' + u.built,
+          channel: u.channel === 'beta' ? 'Beta' : 'Stabil',
+          chBg: u.channel === 'beta' ? 'var(--koklch096003075,oklch(0.96 0.03 75))' : 'var(--acc-g-tint,#e2f3e7)',
+          chColor: u.channel === 'beta' ? 'var(--k8a5310,#8a5310)' : 'var(--acc-g-ink,#0f6e2b)',
+          lastCheck: u.lastCheck ? 'Sist sjekket ' + u.lastCheck : 'Ikke sjekket ennå',
+          checkLabel: ui.checking ? 'Sjekker …' : 'Se etter oppdateringer',
+          onCheck: ui.checking || (r && !r.done) ? undefined : this.checkUpdate,
+          checkOp: ui.checking || (r && !r.done) ? 0.5 : 1,
+          hasFound: !!f && f !== 'none' && !r,
+          isLatest: f === 'none' && !r,
+          fVer: f && f.ver,
+          fMeta: f && f.ver ? 'Utgitt ' + f.date + ' · ' + f.size : '',
+          fNotes: f && f.notes ? f.notes.map(t => ({ t })) : [],
+          bkNote: u.backup
+            ? bkOk
+              ? 'Tar backup til //' + bk.host + '/' + bk.share + ' før oppdatering.'
+              : 'Backup før oppdatering er på, men SMB-backup er ikke satt opp.'
+            : 'Ingen backup før oppdatering.',
+          bkColor: u.backup && !bkOk ? 'var(--kb26a1e,#b26a1e)' : 'var(--k6b6862,#6b6862)',
+          onUpdate: () => this.runUpdate(),
+          running: !!r && !r.done,
+          isDone: !!r && r.done,
+          pct: r ? Math.min(100, Math.round(r.pct)) + '%' : '0%',
+          pctNum: r ? Math.min(100, Math.round(r.pct)) + ' %' : '',
+          step: r ? r.step : '',
+          log: r ? r.log.map(t => ({ t })) : [],
+          doneText:
+            r && r.done
+              ? r.rollback
+                ? 'Tilbake på ' + r.to + '. Alt kjører.'
+                : 'Oppdatert til ' + r.to + '. Alt kjører.'
+              : '',
+          hasPrev: !!u.prev && !(r && !r.done),
+          prevLabel: 'Gå tilbake til ' + (u.prev || ''),
+          onRollback: () => this.runUpdate({ ver: u.prev, date: u.built, size: '' }, true),
+          closeDone: () => this.uu({ run: null })
+        },
+        head('KANAL'),
+        segX(
+          'Oppdateringskanal',
+          u.channel,
+          [
+            ['Stabil', 'stable'],
+            ['Beta', 'beta']
+          ],
+          x => {
+            this.up({ channel: x });
+            this.uu({ found: null });
+          }
+        ),
+        note(
+          u.channel === 'beta'
+            ? 'Beta får nye funksjoner tidligere, men kan ha feil. Ikke anbefalt rett før innlevering.'
+            : 'Stabil får testede versjoner omtrent én gang i måneden.'
+        ),
+        head('AUTOMATISK'),
+        togX('Oppdater automatisk', u.auto, () => this.up({ auto: !u.auto })),
+        ...(u.auto
+          ? [
+              segX(
+                'Tidspunkt',
+                u.time,
+                [
+                  ['02:00', '02:00'],
+                  ['04:00', '04:00'],
+                  ['06:00', '06:00']
+                ],
+                x => this.up({ time: x })
+              )
+            ]
+          : []),
+        togX('Ta backup før oppdatering', u.backup, () => this.up({ backup: !u.backup })),
+        togX('Varsle innloggede brukere 5 min før', u.notify, () => this.up({ notify: !u.notify })),
+        note(
+          'Under oppdateringen er serveren nede i omtrent 20 sekunder. Ulagrede endringer holdes i appen og synkroniseres når serveren er oppe igjen. Mac- og Windows-appene oppdaterer seg selv ved neste oppstart.'
+        )
+      ];
+    } else if (TB === 'server')
       rows = [
         head('TILGANG FOR ANDRE BRUKERE'),
         togX('Vis versjonshistorikk', S.histOthers !== false, () => this.setS('histOthers', S.histOthers === false)),
@@ -3159,6 +4076,9 @@ export default class Component extends DCLogic {
           'DuckDNS gir serveren et fast navn selv om IP-adressen hjemme endrer seg. Serveren sender IP-adressen sin til DuckDNS med jevne mellomrom.'
         ),
         togX('Bruk DuckDNS', d.on, () => this.dk({ on: !d.on })),
+        togX('Bruk DuckDNS-adressen i delingslenker og invitasjoner', d.on && d.links !== false, () =>
+          this.dk({ links: d.links === false })
+        ),
         fld('Subdomene', d.domain, x => this.dk({ domain: x.trim().toLowerCase() }), {
           ph: 'mitt-navn',
           suffix: '.duckdns.org',
@@ -3334,29 +4254,7 @@ export default class Component extends DCLogic {
           'Dokumenter, figurer og versjonshistorikk pakkes og kopieres til en delt mappe på NAS-en, for eksempel Unraid, TrueNAS eller Windows.'
         ),
         togX('Automatisk backup', bk.on, () => this.sb({ on: !bk.on })),
-        fld('Server', bk.host, x => this.sb({ host: x.trim() }), { ph: '192.168.1.10 eller tower.local' }),
-        fld('Share', bk.share, x => this.sb({ share: x.trim() }), {
-          ph: 'backup',
-          err: /[\\/]/.test(bk.share) ? 'Bare navnet på sharen, uten skråstrek.' : ''
-        }),
-        fld('Mappe', bk.path, x => this.sb({ path: x.trim() }), { ph: 'kobling' }),
-        fld('Brukernavn', bk.user, x => this.sb({ user: x }), { ph: 'backup' }),
-        fld('Passord', bk.pass, x => this.sb({ pass: x }), {
-          type: bu.showPass ? 'text' : 'password',
-          eye: () => this.sbu({ showPass: !bu.showPass }),
-          eyeLabel: bu.showPass ? 'Skjul' : 'Vis'
-        }),
-        fld('Domene / arbeidsgruppe', bk.domain, x => this.sb({ domain: x }), { ph: 'WORKGROUP' }),
-        segX(
-          'SMB-versjon',
-          bk.ver,
-          [
-            ['2.1', '2.1'],
-            ['3.0', '3.0'],
-            ['3.1.1', '3.1.1']
-          ],
-          x => this.sb({ ver: x })
-        ),
+        this.smbRow(bk, bu),
         segX(
           'Tidsplan',
           bk.schedule,
@@ -3485,13 +4383,22 @@ export default class Component extends DCLogic {
     v.backupList = s.backups.map(k => ({
       name: k.name,
       meta: k.date + ' ' + k.time + ' · ' + k.size + ' · ' + k.files + ' filer',
-      onRestore: () => this.restoreBackup(k),
+      onRestore: () => this.openRestore(k),
+      isRemote: !!k.remote,
       onDownload: () => {
         download(k.name.replace('.tar.zst', '.json'), JSON.stringify(k.docs, null, 2), 'application/json');
         this.toast('Backup lastet ned');
       }
     }));
     v.noBackups = !s.backups.length;
+    v.fetchBackups = this.fetchBackups;
+    v.fetchLabel = s.fetchingBk ? 'Henter …' : 'Hent fra sharen';
+    v.pickBackupFile = () => {
+      const el = this.bkFileRef.current;
+      if (el) el.click();
+    };
+    v.bkFileRef = this.bkFileRef;
+    v.onBackupFile = this.onBackupFile;
     v.hasCmd = dep.target !== 'unraid';
     v.cmdShown = dep.target === 'proxmox' ? (G ? G.pveOneLiner(masked) : 'Laster …') : 'docker compose up -d';
     v.copyCmd = () => this.copyText(dep.target === 'proxmox' && G ? G.pveOneLiner(cfg) : 'docker compose up -d');
@@ -3590,6 +4497,28 @@ export default class Component extends DCLogic {
         ' nyeste beholdes på sharen\n\n' +
         envOf(c, /^BACKUP/);
       file = { title: 'Backup-jobb', sub: 'smbclient, ingen mount nødvendig', text: mk(masked), real: mk(cfg), dl: [] };
+    } else if (TB === 'update') {
+      const ver = (s.updUi.found && s.updUi.found.ver) || 'latest';
+      const sh =
+        dep.target === 'proxmox'
+          ? '#!/usr/bin/env bash\n# Kjør på Proxmox-noden (Kobling er installert direkte i containeren)\npct exec ' +
+            dep.ctid +
+            ' -- kobling-update'
+          : dep.target === 'unraid'
+            ? '# Unraid: Docker › kobling-server › Check for updates › Apply update\n# eller i terminal:\ndocker pull ghcr.io/sebastiankristo/kobling-server:latest\ndocker restart kobling-server'
+            : '#!/usr/bin/env bash\ncd ' +
+              (dep.datadir || '.').replace(/\/data$/, '') +
+              '\ndocker compose pull\ndocker compose up -d\ndocker image prune -f';
+      file = {
+        title: 'update.sh',
+        sub:
+          'Manuell oppdatering (' +
+          (dep.target === 'proxmox' ? 'Proxmox' : dep.target === 'unraid' ? 'Unraid' : 'Docker Compose') +
+          ')',
+        text: sh,
+        real: sh,
+        dl: [['update.sh', sh]]
+      };
     } else if (!G)
       file = {
         title: 'Filer',
@@ -3703,7 +4632,10 @@ export default class Component extends DCLogic {
         bg: l.cid && l.cid === c.sel ? HL : 'transparent',
         onClick: () => l.cid && this.circSet({ sel: l.cid })
       }));
-      const q = s.palQ.trim().toLowerCase();
+      const q = s.palQ.trim().toLowerCase(),
+        icDark = themeAttr === 'dark',
+        icInk = icDark ? '#e6ebf1' : '#16181d',
+        icBg = icDark ? '#222a35' : '#fff';
       v.palette = PAL.map(g => ({
         label: g.g,
         items: g.items
@@ -3717,14 +4649,14 @@ export default class Component extends DCLogic {
               icon: h(
                 'svg',
                 {
-                  width: T.two || T.gate || k === 'opamp' ? 54 : big ? 30 : 28,
-                  height: big || k === 'opamp' ? 36 : 28,
+                  width: T.two || T.gate || k === 'opamp' ? 62 : big ? 34 : 32,
+                  height: big || k === 'opamp' ? 40 : 32,
                   viewBox: iconVB(k),
                   fill: 'none',
-                  stroke: '#1f1e1c',
-                  strokeWidth: T.gate || k === 'opamp' || big ? 2.6 : 2
+                  stroke: icInk,
+                  strokeWidth: T.gate || k === 'opamp' || big ? 2.8 : 2.4
                 },
-                symEls(k, S.style, '#fff', '#1f1e1c')
+                symEls(k, S.style, icBg, icInk)
               )
             };
           })
@@ -3863,7 +4795,7 @@ export default class Component extends DCLogic {
       shadow: S.cols === c ? '0 1px 2px rgba(0,0,0,.12)' : 'none',
       fw: S.cols === c ? 600 : 400
     }));
-    const rw = Math.max(320, Math.min(s.rightW, (window.innerWidth || 1440) - 236 - 380));
+    const rw = Math.max(320, Math.min(s.rightW, (window.innerWidth || 1440) - (s.sideHidden ? 0 : 246) - 380));
     v.rightW = rw;
     const z = Math.max(0.6, Math.min(2.4, (rw - 56) / 440));
     v.pdfZoom = z;

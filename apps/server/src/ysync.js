@@ -205,5 +205,14 @@ export function createSync(db, { onComment = () => {}, saveDelay = 800 } = {}) {
     for (const r of rooms.values()) if (r.isHist) for (const [ws, c] of r.conns) if (test(c.user)) ws.close(4403, 'Historikk er slått av');
   }
 
-  return { handle, readDoc, readComments, reset, flushAll, closeHistoryFor, rooms };
+  // Beskjed til alle innloggede (f.eks. «Serveren oppdateres om 5 minutter»), meldingstype 10.
+  function notice(text) {
+    const enc = encoding.createEncoder();
+    encoding.writeVarUint(enc, 10);
+    encoding.writeVarString(enc, text);
+    const msg = encoding.toUint8Array(enc);
+    for (const r of rooms.values()) if (!r.isHist) for (const [ws] of r.conns) if (ws.readyState === 1) ws.send(msg);
+  }
+
+  return { handle, readDoc, readComments, reset, flushAll, closeHistoryFor, notice, rooms };
 }

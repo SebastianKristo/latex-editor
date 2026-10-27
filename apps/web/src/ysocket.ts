@@ -7,7 +7,7 @@ import * as decoding from 'lib0/decoding';
 import { Y } from '@kobling/core/ydoc';
 import { wsBase, authQuery } from './api';
 
-const MSG_SYNC = 0, MSG_AWARENESS = 1, MSG_DENIED = 9;
+const MSG_SYNC = 0, MSG_AWARENESS = 1, MSG_DENIED = 9, MSG_NOTICE = 10;
 
 export class YSocket {
   doc = new Y.Doc();
@@ -15,6 +15,7 @@ export class YSocket {
   synced = false;
   onSynced: () => void = () => {};
   onDenied: () => void = () => {};
+  onNotice: (text: string) => void = () => {};
   onStatus: (s: 'online' | 'offline' | 'closed', code?: number) => void = () => {};
   private ws: WebSocket | null = null;
   private wait = 500;
@@ -60,6 +61,7 @@ export class YSocket {
       } else if (type === MSG_AWARENESS) {
         awarenessProtocol.applyAwarenessUpdate(this.awareness, decoding.readVarUint8Array(dec), 'remote');
       } else if (type === MSG_DENIED) this.onDenied();
+      else if (type === MSG_NOTICE) this.onNotice(decoding.readVarString(dec));
     };
     ws.onclose = e => {
       this.ws = null;

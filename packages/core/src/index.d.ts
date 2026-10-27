@@ -51,3 +51,7 @@ export function gamepad(): Circuit;
 export function tok(s: string): { t: string; c: string }[];
 export function parseDocument(tex: string, o?: { S?: Settings; prev?: Partial<Doc> }): { title?: string; authors?: string; group?: string; preamble?: string; blocks: Block[] };
 export function skeleton(tpl: string): Block[];
+export function sha256(s: string): string;
+export function figPreamble(tex: string): string;
+export function figKey(pre: string, code: string): string;
+export function extractFigures(tex: string): { code: string; line: number; hash: string }[];

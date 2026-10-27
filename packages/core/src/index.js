@@ -1,3 +1,4 @@
+import { FIG_ENV, figKey, figWrap, figInner } from './figures.js';
 // Opprinnelig løftet fra prototypen (tools/extract-prototype.mjs). Ren logikk uten DOM.
 /* eslint-disable */
 const ACC = 'oklch(0.55 0.17 255)',
@@ -229,7 +230,15 @@ const qtyCode = v => `\\qty{${v.num}}{${pf(v.prefix).c}${un(v.unit).c}}`;
 const esc = s => (s || '').replace(/([%&#_$])/g, '\\$1');
 const symCode = s => `$${s.tex}${s.sub ? '_{' + s.sub + '}' : ''}$`;
 const segTex = s =>
-  s.t === 'text' ? esc(s.v) : s.t === 'unit' ? qtyCode(s) : s.t === 'sym' ? symCode(s) : `\\cref{${s.target}}`;
+  s.t === 'text'
+    ? esc(s.v)
+        .replace(/\u200B/g, '')
+        .replace(/\n/g, '\\\\\n')
+    : s.t === 'unit'
+      ? qtyCode(s)
+      : s.t === 'sym'
+        ? symCode(s)
+        : `\\cref{${s.target}}`;
 const norm = segs => {
   const o = [];
   segs.forEach(s => {
@@ -978,7 +987,14 @@ function parseBlock(b, code) {
       return { text: unesc(x.trim()) };
     }
     case 'p':
-      return { segs: parseInline(body.replace(/\s*\n\s*/g, ' ')) };
+      return {
+        segs: parseInline(
+          body
+            .replace(/\\\\[ \t]*\n?/g, '\u0001')
+            .replace(/\s*\n\s*/g, ' ')
+            .replace(/\s*\u0001\s*/g, '\u0001')
+        ).map(sg => (sg.t === 'text' ? { ...sg, v: sg.v.replace(/\u0001/g, '\n') } : sg))
+      };
     case 'eq': {
       const x = grab(/\\begin\{equation\}([\s\S]*)\\end\{equation\}/);
       if (x == null) throw new Error('Forventet \\begin{equation} … \\end{equation}');
@@ -1428,6 +1444,36 @@ const SI_UNIT = u => {
 };
 const DROP =
   /^(label|vspace|hspace|setlength|markcell|addtolength|newcommand|renewcommand|def|usetikzlibrary|ctikzset|tikzset|sisetup|pagestyle|thispagestyle|bibliographystyle|columnbreak|newpage|clearpage|FloatBarrier|centering|noindent|small|footnotesize|scriptsize|tiny|large|Large|normalsize|hfill|vfill|medskip|bigskip|smallskip|raggedright|maketitle|par|indent|selectfont|hline|toprule|midrule|bottomrule|cline|cmidrule)$/;
+// Figur fra serveren (README §9): bilde når det finnes, ellers plassholder (puls under kompilering, rød ved feil).
+function figHtml(ctx, env, raw) {
+  const w = ctx.figWrap && ctx.figWrap.inner === raw ? ctx.figWrap : null,
+    h = figKey(ctx.fig.pre, w ? w.pre + raw + '}' : raw),
+    st = ctx.fig.state(h);
+  if (st === 'ok')
+    return (
+      '<div style="margin:.4em auto;text-align:center;break-inside:avoid"><img src="' +
+      escH(ctx.fig.url(h)) +
+      '" alt="' +
+      escH(env) +
+      '" style="max-width:92%;height:auto;filter:var(--fig-filter,none)"></div>'
+    );
+  const err = st === 'error';
+  return (
+    '<div data-fig="' +
+    h +
+    '" style="margin:.4em auto;max-width:92%;border:1px dashed ' +
+    (err ? 'var(--kb3261e,#b3261e)' : 'currentColor') +
+    ';color:' +
+    (err ? 'var(--kb3261e,#b3261e)' : 'inherit') +
+    ';opacity:' +
+    (err ? 1 : 0.55) +
+    ';border-radius:4px;padding:1.3em .6em;text-align:center;font-family:Geist Mono,monospace;font-size:.8em;break-inside:avoid' +
+    (st === 'busy' ? ';animation:kobling-pulse 1.4s ease-in-out infinite' : '') +
+    '">' +
+    (err ? 'Figuren kunne ikke tegnes · se logg' : escH(env) + ' · tegnes av serveren etter kompilering') +
+    '</div>'
+  );
+}
 function texRender(src, ctx) {
   const k = window.katex;
   const km = (t, d) => {
@@ -1522,7 +1568,7 @@ function texRender(src, ctx) {
       '</table>'
     );
   };
-  const envR = (env, body, args) => {
+  const envR = (env, body, args, raw) => {
     const e = env.replace(/\*$/, '');
     if (/^(equation|align|gather|multline|flalign|alignat|eqnarray|displaymath|math)$/.test(e)) {
       let num = '';
@@ -1577,11 +1623,12 @@ function texRender(src, ctx) {
       ctx.env = st;
       return o;
     }
+    if (FIG_ENV.test(e) && ctx.fig && raw) return figHtml(ctx, env, raw);
     if (/^(tikzpicture|circuitikz|axis|scope)$/.test(e))
       return (
         '<div style="margin:.4em auto;max-width:92%;border:1px dashed currentColor;opacity:.55;border-radius:4px;padding:1.3em .6em;text-align:center;font-family:Geist Mono,monospace;font-size:.8em;break-inside:avoid">' +
         escH(env) +
-        ' · tegnes i ferdig PDF</div>'
+        ' · tegnes av serveren etter kompilering</div>'
       );
     if (e === 'abstract')
       return (
@@ -1727,7 +1774,7 @@ function texRender(src, ctx) {
         }
         const [body, nj] = findEnd(s, j, env);
         flush();
-        out += envR(env, body, args);
+        out += envR(env, body, args, s.slice(i, nj));
         i = nj;
         continue;
       }
@@ -1850,12 +1897,17 @@ function texRender(src, ctx) {
         continue;
       }
       if (st === 'resizebox' || st === 'scalebox') {
-        let a = readGroup(s, j);
+        const a1 = readGroup(s, j);
+        let a = a1;
         if (st === 'resizebox' && a) a = readGroup(s, a[1]);
         const b = a && readGroup(s, a[1]);
         flush();
         if (b) {
+          // en figur alene i boksen får boksen med i figurkoden (samme nøkkel som på serveren)
+          const pw = ctx.figWrap;
+          ctx.figWrap = { inner: figInner(b[0]), pre: figWrap(st, a1[0], a[0]) };
           out += R(b[0]);
+          ctx.figWrap = pw;
           i = b[1];
         } else i = j;
         continue;
@@ -2264,7 +2316,53 @@ const ACCOUNTS = [
   { id: 'MH', name: 'Mia Hansen', email: 'mia.hansen@student.no', admin: false },
   { id: 'EL', name: 'Emil Larsen', email: 'emil.larsen@student.no', admin: false }
 ];
-const ADMIN_TABS = ['server', 'duck', 'backup', 'smtp', 'install'];
+const ADMIN_TABS = ['server', 'duck', 'backup', 'smtp', 'install', 'update'];
+const DEF_UPD = {
+  ver: '1.4.2',
+  built: '12.10.2026',
+  prev: null,
+  channel: 'stable',
+  auto: false,
+  time: '04:00',
+  backup: true,
+  notify: true,
+  lastCheck: ''
+};
+const RELEASES = {
+  stable: {
+    ver: '1.5.0',
+    date: '24.10.2026',
+    size: '182 MB',
+    notes: [
+      'Redigerbar LaTeX-kode med feilsjekk og logg',
+      'Bilder i fillisten med dra og slipp',
+      'Gjenoppretting fra tidligere backup',
+      'Mørk modus og nytt utseende',
+      'Raskere kompilering (latexmk med mellomlager)'
+    ]
+  },
+  beta: {
+    ver: '1.6.0-beta.2',
+    date: '25.10.2026',
+    size: '186 MB',
+    notes: [
+      'Alt i 1.5.0',
+      'Ekte TikZ-forhåndsvisning i editoren',
+      'Eksport til Word (.docx)',
+      'Kjent feil: kretseditoren kan hakke på store skjema'
+    ]
+  }
+};
+const vcmp = (a, b) => {
+  const p = x => x.split(/[.-]/).map(n => (isNaN(+n) ? -1 : +n));
+  const A = p(a),
+    B = p(b);
+  for (let i = 0; i < Math.max(A.length, B.length); i++) {
+    const d = (A[i] || 0) - (B[i] || 0);
+    if (d) return d;
+  }
+  return 0;
+};
 const DEF_SMTP = {
   provider: 'proton',
   host: 'smtp.protonmail.ch',
@@ -2901,6 +2999,7 @@ function autoLayout(d) {
   return { ...d, comps };
 }
 
+export { sha256, figPreamble, figKey, extractFigures } from './figures.js';
 export {
   cellText,
   listCells,
@@ -2991,6 +3090,9 @@ export {
   lintTex,
   ACCOUNTS,
   ADMIN_TABS,
+  DEF_UPD,
+  RELEASES,
+  vcmp,
   DEF_SMTP,
   PROTON_FREE,
   SMTP_PRESETS,

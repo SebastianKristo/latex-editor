@@ -204,11 +204,24 @@ const USERS = {
   MH: { name: 'Mia', full: 'Mia Hansen', color: 'oklch(0.62 0.13 150)' },
   EL: { name: 'Emil', full: 'Emil Larsen', color: 'oklch(0.62 0.13 300)' }
 };
-const KIND = { abstract: 'abs', h1: '§', h2: '§§', p: '¶', eq: 'eq', fig: 'fig', img: 'img', table: 'tab', raw: 'TeX' };
+const KIND = {
+  abstract: 'abs',
+  h1: '§',
+  h2: '§§',
+  p: '¶',
+  eq: 'eq',
+  fig: 'fig',
+  img: 'img',
+  table: 'tab',
+  raw: 'TeX',
+  plot: 'graf'
+};
 const GROUPS = ['ADK 61 · ELI1300', 'Lab-par · ELPE1300', 'Privat'];
 const TPLS = [
   { k: 'rapport', name: 'Rapportmal ELI1300', desc: 'Jetlund 2025 · tospalte, 11pt, siunitx, circuitikz' },
   { k: 'lab', name: 'Labjournal', desc: 'Mål, oppkobling, måletabell og observasjoner' },
+  { k: 'oving', name: 'Øvingsoppgaver', desc: 'Oppgave 1 a), b) … med utregninger og svar' },
+  { k: 'forarbeid', name: 'Forarbeid til lab', desc: 'Teori, beregninger og simulering før labdagen' },
   { k: 'tom', name: 'Tom artikkel', desc: 'Bare preamble fra mal-oppsettet' }
 ];
 const uid = () => Math.random().toString(36).slice(2, 9);
@@ -221,7 +234,604 @@ const now = () => {
 const t = v => ({ t: 'text', v }),
   u = (num, prefix, unit) => ({ t: 'unit', num, prefix, unit }),
   sy = (base, sub, tex) => ({ t: 'sym', base, sub, tex: tex || base }),
-  rf = target => ({ t: 'ref', target });
+  rf = target => ({ t: 'ref', target }),
+  citeSeg = key => ({ t: 'cite', key });
+const MATH = [
+  ['∫', '\\int_{a}^{b}', 'integral'],
+  ['∑', '\\sum_{k=1}^{n}', 'sum'],
+  ['∏', '\\prod_{k=1}^{n}', 'produkt'],
+  ['a/b', '\\frac{a}{b}', 'brøk frac'],
+  ['√', '\\sqrt{x}', 'rot sqrt'],
+  ['xⁿ', 'x^{n}', 'potens'],
+  ['xₙ', 'x_{n}', 'indeks'],
+  ['∂', '\\partial', 'partiell'],
+  ['d/dt', '\\frac{\\mathrm{d}}{\\mathrm{d}t}', 'derivert'],
+  ['∞', '\\infty', 'uendelig'],
+  ['lim', '\\lim_{x \\to 0}', 'grense'],
+  ['∠', '\\angle', 'vinkel fasor'],
+  ['∥', '\\parallel', 'parallell'],
+  ['≈', '\\approx', 'omtrent'],
+  ['≠', '\\neq', 'ikke lik'],
+  ['≤', '\\leq', 'mindre enn'],
+  ['≥', '\\geq', 'større enn'],
+  ['±', '\\pm', 'pluss minus'],
+  ['·', '\\cdot', 'gange prikk'],
+  ['×', '\\times', 'kryss'],
+  ['→', '\\to', 'pil'],
+  ['⇒', '\\Rightarrow', 'medfører'],
+  ['x̄', '\\overline{x}', 'strek over ikke'],
+  ['x̂', '\\hat{x}', 'hatt'],
+  ['ẋ', '\\dot{x}', 'prikk tidsderivert'],
+  ['|x|', '\\left| x \\right|', 'absoluttverdi'],
+  ['( )', '\\left( x \\right)', 'parentes'],
+  ['ω', '\\omega', 'omega'],
+  ['Ω', '\\Omega', 'stor omega'],
+  ['π', '\\pi', 'pi'],
+  ['μ', '\\mu', 'my'],
+  ['ε', '\\varepsilon', 'epsilon'],
+  ['j', '\\mathrm{j}', 'imaginær enhet'],
+  ['Re', '\\operatorname{Re}', 'realdel'],
+  ['Im', '\\operatorname{Im}', 'imaginærdel'],
+  ['dB', '20\\log_{10}', 'desibel log'],
+  ['⊕', '\\oplus', 'xor'],
+  ['∧', '\\land', 'og and'],
+  ['∨', '\\lor', 'eller or'],
+  ['[ ]', '\\begin{bmatrix} a & b \\\\ c & d \\end{bmatrix}', 'matrise']
+].map(([s, tex, n]) => ({ s, tex, n }));
+const SPELL_NB = {
+  kondesator: 'kondensator',
+  kondensatorn: 'kondensatoren',
+  motsand: 'motstand',
+  motsanden: 'motstanden',
+  komponennt: 'komponent',
+  komponeter: 'komponenter',
+  transitor: 'transistor',
+  tranistor: 'transistor',
+  osiloskop: 'oscilloskop',
+  oscilliskop: 'oscilloskop',
+  osilloskop: 'oscilloskop',
+  idag: 'i dag',
+  igang: 'i gang',
+  istedet: 'i stedet',
+  ihvertfall: 'i hvert fall',
+  tilslutt: 'til slutt',
+  iforhold: 'i forhold',
+  alikevel: 'likevel',
+  iløpet: 'i løpet',
+  beregnigen: 'beregningen',
+  utrekning: 'utregning',
+  anntall: 'antall',
+  sammt: 'samt',
+  forsterkining: 'forsterkning',
+  målling: 'måling',
+  resulat: 'resultat',
+  resulatet: 'resultatet',
+  fekvens: 'frekvens',
+  frekens: 'frekvens',
+  kapasitanse: 'kapasitans',
+  effeckt: 'effekt',
+  paralell: 'parallell',
+  parallel: 'parallell',
+  serikobling: 'seriekobling',
+  paralellkobling: 'parallellkobling',
+  tilnermet: 'tilnærmet',
+  noyaktig: 'nøyaktig',
+  spenningsdelar: 'spenningsdeler',
+  inngnag: 'inngang',
+  utgnag: 'utgang'
+};
+const SPELL_EN = {
+  teh: 'the',
+  recieve: 'receive',
+  seperate: 'separate',
+  occured: 'occurred',
+  definately: 'definitely',
+  voltge: 'voltage',
+  resitor: 'resistor',
+  capacitator: 'capacitor',
+  transitor: 'transistor',
+  paralel: 'parallel',
+  paralell: 'parallel',
+  freqency: 'frequency',
+  measurment: 'measurement',
+  amplifer: 'amplifier',
+  untill: 'until',
+  wich: 'which',
+  thier: 'their',
+  accross: 'across',
+  calulate: 'calculate',
+  calcuate: 'calculate'
+};
+function parseCSV(tx) {
+  const ls = (tx || '')
+    .replace(/\r/g, '')
+    .split('\n')
+    .filter(l => l.trim());
+  if (!ls.length) return { head: [], rows: [] };
+  const sep = ls[0].includes('\t') ? '\t' : ls[0].includes(';') ? ';' : ',',
+    sp = l => l.split(sep).map(x => x.trim()),
+    num = x => parseFloat(String(x).replace(',', '.'));
+  let head = sp(ls[0]),
+    body = ls.slice(1);
+  if (head.every(x => !isNaN(num(x)))) {
+    body = ls;
+    head = head.map((_, i) => (i ? 'y' + i : 'x'));
+  }
+  return {
+    head,
+    rows: body
+      .map(sp)
+      .map(r => r.map(num))
+      .filter(r => r.length >= 2 && r.length >= head.length - 0 && !isNaN(r[0]))
+  };
+}
+function parseGrid(tx) {
+  const ls = (tx || '')
+    .replace(/\r/g, '')
+    .split('\n')
+    .filter(l => l.trim());
+  if (!ls.length) return [];
+  const sep = ls.some(l => l.includes('\t')) ? '\t' : ls[0].includes(';') ? ';' : ',';
+  const rows = ls.map(l => l.split(sep).map(x => x.trim()));
+  const n = Math.max(...rows.map(r => r.length));
+  return rows.map(r => [...r, ...Array(n - r.length).fill('')]);
+}
+function plotSvg(b, o) {
+  o = o || {};
+  const d = parseCSV(b.csv),
+    E = React.createElement,
+    W = o.w || 460,
+    PH = o.h || 240,
+    logx = b.kind === 'bode';
+  const rows = d.rows.filter(r => !logx || r[0] > 0);
+  if (rows.length < 2) return null;
+  const panels = logx && d.head.length >= 3 ? [[1], [2]] : [d.head.slice(1).map((_, i) => i + 1)],
+    L = 54,
+    R = 14,
+    T = 12,
+    B = 40,
+    H = panels.length * PH;
+  const fx = logx ? Math.log10 : x => x,
+    xv = rows.map(r => fx(r[0])),
+    x0 = Math.min(...xv),
+    x1 = Math.max(...xv),
+    X = v => L + ((fx(v) - x0) / (x1 - x0 || 1)) * (W - L - R);
+  const nice = (a, c, n) => {
+    const span = c - a || 1,
+      s0 = Math.pow(10, Math.floor(Math.log10(span / n))),
+      m = [1, 2, 2.5, 5, 10].map(k => k * s0).find(k => span / k <= n) || s0 * 10,
+      out = [];
+    for (let i = Math.ceil(a / m); i * m <= c + m * 1e-6; i++) out.push(+(i * m).toPrecision(10));
+    return out;
+  };
+  const fmt = v => {
+    const a = Math.abs(v);
+    return (
+      a >= 1e6
+        ? +(v / 1e6).toPrecision(4) + 'M'
+        : a >= 1e3
+          ? +(v / 1e3).toPrecision(4) + 'k'
+          : String(+v.toPrecision(4))
+    ).replace('.', ',');
+  };
+  const xt = logx
+    ? (() => {
+        const q = [];
+        for (let k = Math.ceil(x0 - 1e-9); k <= Math.floor(x1 + 1e-9); k++) q.push(Math.pow(10, k));
+        return q;
+      })()
+    : nice(x0, x1, 6);
+  const lab = s =>
+    (s || '')
+      .replace(/\\qty\{([^}]*)\}\{[^}]*\}/g, '$1')
+      .replace(/[$\\{}]/g, '')
+      .replace(/_/g, '');
+  const COL = ['#1f5fbf', '#c0392b', '#2e8b57', '#8e44ad', '#d35400'],
+    K = [],
+    ink = '#222',
+    grid = '#e3e1dc';
+  panels.forEach((cols, pi) => {
+    const top = pi * PH + T,
+      bot = pi * PH + PH - B,
+      ys = [];
+    cols.forEach(c =>
+      rows.forEach(r => {
+        if (isFinite(r[c])) ys.push(r[c]);
+      })
+    );
+    if (!ys.length) return;
+    let y0 = Math.min(...ys),
+      y1 = Math.max(...ys);
+    if (y0 === y1) {
+      y0 -= 1;
+      y1 += 1;
+    }
+    const yt = nice(y0, y1, 5);
+    y0 = Math.min(y0, yt[0]);
+    y1 = Math.max(y1, yt[yt.length - 1]);
+    const Y = v => bot - ((v - y0) / (y1 - y0 || 1)) * (bot - top);
+    if (logx)
+      for (let k = Math.floor(x0); k < x1; k++)
+        for (let mm = 2; mm < 10; mm++) {
+          const v = mm * Math.pow(10, k),
+            f = fx(v);
+          if (f > x0 && f < x1)
+            K.push(
+              E('line', {
+                key: 'gm' + pi + '_' + v,
+                x1: X(v),
+                x2: X(v),
+                y1: top,
+                y2: bot,
+                stroke: grid,
+                strokeWidth: 0.5
+              })
+            );
+        }
+    yt.forEach(v => {
+      K.push(
+        E('line', { key: 'gy' + pi + '_' + v, x1: L, x2: W - R, y1: Y(v), y2: Y(v), stroke: grid, strokeWidth: 1 })
+      );
+      K.push(
+        E(
+          'text',
+          { key: 'ty' + pi + '_' + v, x: L - 6, y: Y(v) + 4, textAnchor: 'end', fontSize: 11, fill: ink },
+          fmt(v)
+        )
+      );
+    });
+    xt.forEach(v => {
+      K.push(
+        E('line', { key: 'gx' + pi + '_' + v, x1: X(v), x2: X(v), y1: top, y2: bot, stroke: grid, strokeWidth: 1 })
+      );
+      if (pi === panels.length - 1)
+        K.push(
+          E('text', { key: 'tx' + v, x: X(v), y: bot + 15, textAnchor: 'middle', fontSize: 11, fill: ink }, fmt(v))
+        );
+    });
+    K.push(
+      E('rect', {
+        key: 'ax' + pi,
+        x: L,
+        y: top,
+        width: W - L - R,
+        height: bot - top,
+        fill: 'none',
+        stroke: ink,
+        strokeWidth: 1
+      })
+    );
+    cols.forEach((c, ci) =>
+      K.push(
+        E('polyline', {
+          key: 's' + pi + '_' + c,
+          points: rows
+            .filter(r => isFinite(r[c]))
+            .map(r => X(r[0]).toFixed(1) + ',' + Y(r[c]).toFixed(1))
+            .join(' '),
+          fill: 'none',
+          stroke: COL[(pi + ci) % COL.length],
+          strokeWidth: 2,
+          strokeLinejoin: 'round'
+        })
+      )
+    );
+    K.push(
+      E(
+        'text',
+        {
+          key: 'yl' + pi,
+          transform: 'translate(13 ' + (top + bot) / 2 + ') rotate(-90)',
+          textAnchor: 'middle',
+          fontSize: 12,
+          fill: ink
+        },
+        lab(pi === 0 ? b.ylabel || d.head[1] : d.head[2])
+      )
+    );
+    if (cols.length > 1)
+      cols.forEach((c, ci) => {
+        K.push(
+          E('line', {
+            key: 'lg' + c,
+            x1: W - R - 120,
+            x2: W - R - 102,
+            y1: top + 14 + ci * 15,
+            y2: top + 14 + ci * 15,
+            stroke: COL[ci % COL.length],
+            strokeWidth: 2
+          })
+        );
+        K.push(
+          E('text', { key: 'lt' + c, x: W - R - 96, y: top + 18 + ci * 15, fontSize: 11, fill: ink }, lab(d.head[c]))
+        );
+      });
+  });
+  K.push(
+    E(
+      'text',
+      { key: 'xl', x: (L + W - R) / 2, y: H - 8, textAnchor: 'middle', fontSize: 12, fill: ink },
+      lab(b.xlabel || d.head[0])
+    )
+  );
+  return E(
+    'svg',
+    {
+      viewBox: '0 0 ' + W + ' ' + H,
+      width: '100%',
+      style: { maxWidth: o.max || W, display: 'block', fontFamily: "'STIX Two Text',serif", background: '#fff' }
+    },
+    K
+  );
+}
+function plotLines(b) {
+  const d = parseCSV(b.csv),
+    logx = b.kind === 'bode',
+    two = logx && d.head.length >= 3,
+    O = [],
+    step = Math.max(1, Math.ceil(d.rows.length / 150)),
+    rows = d.rows.filter((_, i) => i % step === 0 || i === d.rows.length - 1);
+  const ax = (yl, cols, extra, xl) => {
+    O.push(
+      '\\begin{axis}[width=\\linewidth,height=' +
+        (two ? '4cm' : '5.5cm') +
+        ',grid=both' +
+        (logx ? ',xmode=log' : '') +
+        (xl ? ',xlabel={' + xl + '}' : ',xticklabels={}') +
+        ',ylabel={' +
+        yl +
+        '}' +
+        (cols.length > 1 ? ',legend pos=north east' : '') +
+        (extra || '') +
+        ']'
+    );
+    cols.forEach(c => {
+      O.push(
+        '  \\addplot[thick,mark=none] coordinates {' + rows.map(r => '(' + r[0] + ',' + r[c] + ')').join(' ') + '};'
+      );
+      if (cols.length > 1) O.push('  \\addlegendentry{' + esc(d.head[c]) + '}');
+    });
+    O.push('\\end{axis}');
+  };
+  O.push('\\begin{tikzpicture}');
+  if (two) {
+    ax(b.ylabel || d.head[1], [1], ',name=mag', null);
+    ax(d.head[2], [2], ',at={(mag.below south west)},anchor=above north west,yshift=-6pt', b.xlabel || d.head[0]);
+  } else
+    ax(
+      b.ylabel || d.head[1],
+      d.head.slice(1).map((_, i) => i + 1),
+      '',
+      b.xlabel || d.head[0]
+    );
+  O.push('\\end{tikzpicture}');
+  return O;
+}
+function citeNums(doc) {
+  const m = {},
+    have = new Set((doc.bib || []).map(e => e.key));
+  let n = 0;
+  doc.blocks.forEach(
+    b =>
+      b.type === 'p' &&
+      b.segs.forEach(s => {
+        if (s.t === 'cite' && have.has(s.key) && !m[s.key]) m[s.key] = ++n;
+      })
+  );
+  (doc.bib || []).forEach(e => {
+    if (!m[e.key]) m[e.key] = ++n;
+  });
+  return m;
+}
+const bibTxt = e =>
+  [e.author, e.title ? '«' + e.title + '»' : '', e.journal, e.year, e.doi ? 'doi:' + e.doi : e.url || '']
+    .filter(Boolean)
+    .join(', ') + '.';
+function bibList(doc) {
+  const m = citeNums(doc);
+  return (doc.bib || []).map(e => ({ key: e.key, n: m[e.key], txt: bibTxt(e) })).sort((a, b) => a.n - b.n);
+}
+function bibKey(e) {
+  const a = (e.author || 'kilde')
+    .split(/ og |,| mfl\./)[0]
+    .trim()
+    .split(' ')
+    .pop();
+  return (slug(a).replace(/-/g, '') || 'kilde') + (e.year || '');
+}
+function parseBibtex(tx) {
+  const out = [],
+    re = /@(\w+)\s*\{\s*([^,\s]+)\s*,([\s\S]*?)\}\s*(?=@|$)/g;
+  let m;
+  while ((m = re.exec(tx || ''))) {
+    const f = {};
+    m[3].replace(/(\w+)\s*=\s*(?:\{((?:[^{}]|\{[^{}]*\})*)\}|"([^"]*)"|(\w+))/g, (_, k, a, b, c) => {
+      f[k.toLowerCase()] = (a != null ? a : b != null ? b : c || '').replace(/[{}]/g, '').replace(/\s+/g, ' ').trim();
+      return '';
+    });
+    out.push({
+      type: m[1].toLowerCase(),
+      key: m[2],
+      author: (f.author || '').replace(/\s+and\s+/g, ' og '),
+      title: f.title || '',
+      journal: f.journal || f.booktitle || f.publisher || '',
+      year: f.year || '',
+      doi: f.doi || '',
+      url: f.url || ''
+    });
+  }
+  return out;
+}
+function toBibtex(bib) {
+  return (
+    (bib || [])
+      .map(
+        e =>
+          '@' +
+          (e.type || 'misc') +
+          '{' +
+          e.key +
+          ',\n' +
+          [
+            ['author', (e.author || '').replace(/ og /g, ' and ')],
+            ['title', e.title],
+            [e.type === 'article' ? 'journal' : 'publisher', e.journal],
+            ['year', e.year],
+            ['doi', e.doi],
+            ['url', e.url]
+          ]
+            .filter(x => x[1])
+            .map(([k, v]) => '  ' + k + ' = {' + v + '}')
+            .join(',\n') +
+          '\n}'
+      )
+      .join('\n\n') + '\n'
+  );
+}
+function wdiff(a, b) {
+  const A = (a || '').split(/(\s+)/).filter(x => x),
+    B = (b || '').split(/(\s+)/).filter(x => x),
+    n = A.length,
+    m = B.length;
+  if (n * m > 200000)
+    return [
+      { t: a, k: 'del' },
+      { t: b, k: 'add' }
+    ];
+  const D = [];
+  for (let i = 0; i <= n; i++) D.push(new Uint16Array(m + 1));
+  for (let i = n - 1; i >= 0; i--)
+    for (let j = m - 1; j >= 0; j--) D[i][j] = A[i] === B[j] ? D[i + 1][j + 1] + 1 : Math.max(D[i + 1][j], D[i][j + 1]);
+  const o = [],
+    P = (t, k) => {
+      const l = o[o.length - 1];
+      if (l && l.k === k) l.t += t;
+      else o.push({ t, k });
+    };
+  let i = 0,
+    j = 0;
+  while (i < n && j < m) {
+    if (A[i] === B[j]) {
+      P(A[i], 'eq');
+      i++;
+      j++;
+    } else if (D[i + 1][j] >= D[i][j + 1]) P(A[i++], 'del');
+    else P(B[j++], 'add');
+  }
+  while (i < n) P(A[i++], 'del');
+  while (j < m) P(B[j++], 'add');
+  return o;
+}
+function blockTxt(b, dec) {
+  if (!b) return '';
+  switch (b.type) {
+    case 'p':
+      return plain(b, dec);
+    case 'h1':
+    case 'h2':
+    case 'abstract':
+      return b.text || '';
+    case 'eq':
+    case 'raw':
+      return b.src || '';
+    case 'table':
+      return b.rows.map(r => r.join(' | ')).join(' / ');
+    default:
+      return 'Figur: ' + (b.caption || '');
+  }
+}
+function textFields(b) {
+  const F = [],
+    add = (k, v, set) => F.push({ k, v: v || '', set });
+  if (b.type === 'h1' || b.type === 'h2' || b.type === 'abstract') add('text', b.text, (x, v) => ({ ...x, text: v }));
+  if (b.type === 'p')
+    b.segs.forEach((s, i) => {
+      if (s.t === 'text')
+        add('s' + i, s.v, (x, v) => ({ ...x, segs: x.segs.map((q, j) => (j === i ? { ...q, v } : q)) }));
+    });
+  if (b.caption != null) add('caption', b.caption, (x, v) => ({ ...x, caption: v }));
+  if (b.type === 'table')
+    b.rows.forEach((r, ri) =>
+      r.forEach((c, ci) =>
+        add('c' + ri + '_' + ci, c, (x, v) => ({
+          ...x,
+          rows: x.rows.map((rr, a) => (a === ri ? rr.map((cc, z) => (z === ci ? v : cc)) : rr))
+        }))
+      )
+    );
+  if (b.type === 'eq' || b.type === 'raw') add('src', b.src, (x, v) => ({ ...x, src: v }));
+  return F;
+}
+const SP_LINE = /^[RCLVID]\w*\s+\w+\s+\w+(\s+\S+){0,5}$/i;
+function isSpice(tx) {
+  if (!tx || /\\/.test(tx)) return false;
+  const ls = tx
+      .split(/\r?\n/)
+      .map(l => l.trim())
+      .filter(l => l && !/^[*.;+]/.test(l)),
+    el = ls.filter(l => SP_LINE.test(l));
+  return el.length >= 2 && el.length >= ls.length * 0.6 && el.some(l => /\s(0|gnd)(\s|$)/i.test(l));
+}
+const SPU = { R: '\\ohm', C: '\\farad', L: '\\henry', V: '\\volt', I: '\\ampere' },
+  SPP = { p: '\\pico', n: '\\nano', u: '\\micro', µ: '\\micro', m: '\\milli', k: '\\kilo', meg: '\\mega', g: '\\giga' };
+function spiceVal(k, v) {
+  if (!SPU[k]) return '';
+  const m = (v || '').replace(/^(dc|ac)\s+/i, '').match(/^(-?\d*\.?\d+(?:e-?\d+)?)\s*(meg|[pnuµmkg])?/i);
+  if (!m) return '';
+  return '\\qty{' + m[1].replace('.', ',') + '}{' + (m[2] ? SPP[m[2].toLowerCase()] || '' : '') + SPU[k] + '}';
+}
+function spiceToTikz(tx) {
+  const el = [];
+  tx.split(/\r?\n/).forEach(l => {
+    l = l.trim();
+    if (!SP_LINE.test(l) || /^[*.;+]/.test(l)) return;
+    const p = l.split(/\s+/);
+    el.push({ k: p[0][0].toUpperCase(), name: p[0], a: p[1], b: p[2], val: p.slice(3).join(' ') });
+  });
+  const G = n => /^(0|gnd)$/i.test(n),
+    nodes = [];
+  el.forEach(e =>
+    [e.a, e.b].forEach(n => {
+      if (!G(n) && !nodes.includes(n)) nodes.push(n);
+    })
+  );
+  const X = {};
+  nodes.forEach((n, i) => (X[n] = i * 3));
+  const out = [],
+    used = {};
+  el.forEach(e => {
+    const sym = e.k === 'V' ? 'v' : e.k === 'I' ? 'i' : e.k,
+      sub = e.name.slice(1) || '1',
+      q = spiceVal(e.k, e.val),
+      opt = e.k + ', l=$' + sym + '_{' + sub + '}$' + (q ? ', a=' + q : '');
+    if (G(e.a) || G(e.b)) {
+      const x = X[G(e.a) ? e.b : e.a];
+      if (x == null) return;
+      out.push('\\draw (' + x + ',0) to[' + opt + '] (' + x + ',3);');
+    } else {
+      const k = [e.a, e.b].sort().join('|'),
+        ia = nodes.indexOf(e.a),
+        ib = nodes.indexOf(e.b),
+        lv = (used[k] = (used[k] || 0) + 1) - 1 + (Math.abs(ia - ib) > 1 ? 1 : 0),
+        xa = X[e.a],
+        xb = X[e.b];
+      if (!lv) out.push('\\draw (' + xa + ',3) to[' + opt + '] (' + xb + ',3);');
+      else {
+        const y = 3 + lv * 2;
+        out.push(
+          '\\draw (' + xa + ',3) -- (' + xa + ',' + y + ') to[' + opt + '] (' + xb + ',' + y + ') -- (' + xb + ',3);'
+        );
+      }
+    }
+  });
+  const gx = el
+    .filter(e => G(e.a) || G(e.b))
+    .map(e => X[G(e.a) ? e.b : e.a])
+    .filter(x => x != null);
+  if (gx.length > 1) out.push('\\draw (' + Math.min(...gx) + ',0) -- (' + Math.max(...gx) + ',0);');
+  if (gx.length) out.push('\\draw (' + Math.min(...gx) + ',0) node[ground]{};');
+  return out.join('\n');
+}
 const pf = k => PFX.find(p => p.k === k) || PFX[0],
   un = k => UNITS.find(x => x.k === k) || UNITS[0];
 const fmtNum = (n, dec) => (dec === '.' ? String(n).replace(',', '.') : String(n).replace('.', ','));
@@ -238,7 +848,9 @@ const segTex = s =>
       ? qtyCode(s)
       : s.t === 'sym'
         ? symCode(s)
-        : `\\cref{${s.target}}`;
+        : s.t === 'cite'
+          ? '\\cite{' + s.key + '}'
+          : `\\cref{${s.target}}`;
 const norm = segs => {
   const o = [];
   segs.forEach(s => {
@@ -567,9 +1179,17 @@ function docCode(doc, S) {
       P(`  \\caption{${esc(b.caption)}}`, i);
       P(`  \\label{${b.label}}`, i);
       P('\\end{' + env + '}', i);
+    } else if (b.type === 'plot') {
+      P('\\begin{figure}[ht]', i);
+      P('  \\centering', i);
+      plotLines(b).forEach(l => P('  ' + l, i));
+      P(`  \\caption{${esc(b.caption)}}`, i);
+      P(`  \\label{${b.label}}`, i);
+      P('\\end{figure}', i);
     } else if (b.type === 'table') {
       const st = b.style || 'grid',
-        ct = r => r.map(cellTex);
+        ct = r => r.map(cellTex),
+        nc = Math.max(1, ...b.rows.map(r => r.length));
       if (st === 'list') {
         P('\\begin{itemize}', i);
         b.rows.slice(1).forEach(r => {
@@ -583,11 +1203,11 @@ function docCode(doc, S) {
         P('  \\caption{' + esc(b.caption) + '}', i);
         P('  \\label{' + b.label + '}', i);
         if (st === 'grid') {
-          P('  \\begin{tabular}{|l|l|l|}\\hline', i);
+          P('  \\begin{tabular}{|' + Array(nc).fill('l').join('|') + '|}\\hline', i);
           b.rows.forEach((r, ri) => P('    ' + ct(r).join(' & ') + ' \\\\' + (ri === 0 ? '\\hline\\hline' : ''), i));
           P('    \\hline', i);
         } else if (st === 'booktabs') {
-          P('  \\begin{tabular}{lll}', i);
+          P('  \\begin{tabular}{' + 'l'.repeat(nc) + '}', i);
           P('    \\toprule', i);
           b.rows.forEach((r, ri) => {
             P('    ' + ct(r).join(' & ') + ' \\\\', i);
@@ -595,7 +1215,7 @@ function docCode(doc, S) {
           });
           P('    \\bottomrule', i);
         } else {
-          P('  \\begin{tabular}{lll}', i);
+          P('  \\begin{tabular}{' + 'l'.repeat(nc) + '}', i);
           b.rows.forEach((r, ri) =>
             P('    ' + (ri === 0 ? ct(r).map(x => (x ? '\\textbf{' + x + '}' : '')) : ct(r)).join(' & ') + ' \\\\', i)
           );
@@ -605,6 +1225,15 @@ function docCode(doc, S) {
       }
     }
   });
+  {
+    const bl = bibList(doc);
+    if (bl.length) {
+      P('');
+      P('\\begin{thebibliography}{' + bl.length + '}');
+      bl.forEach(x => P('  \\bibitem{' + x.key + '} ' + esc(x.txt)));
+      P('\\end{thebibliography}');
+    }
+  }
   P('');
   P('\\end{document}');
   return L;
@@ -625,7 +1254,7 @@ function numberDoc(blocks) {
     } else if (b.type === 'h2') {
       sub++;
       num[b.id] = sec + '.' + sub;
-    } else if (b.type === 'fig' || b.type === 'img') {
+    } else if (b.type === 'fig' || b.type === 'img' || b.type === 'plot') {
       fig++;
       num[b.id] = fig;
       labels[b.label] = { k: 'figur', n: fig, id: b.id };
@@ -651,7 +1280,15 @@ function numberDoc(blocks) {
 const plain = (b, dec) =>
   b.segs
     .map(s =>
-      s.t === 'text' ? s.v : s.t === 'unit' ? qtyText(s, dec) : s.t === 'sym' ? s.base + (s.sub || '') : 'figur 1'
+      s.t === 'text'
+        ? s.v
+        : s.t === 'unit'
+          ? qtyText(s, dec)
+          : s.t === 'sym'
+            ? s.base + (s.sub || '')
+            : s.t === 'cite'
+              ? '[1]'
+              : 'figur 1'
     )
     .join('');
 function paginate(blocks, cols, dec) {
@@ -671,6 +1308,8 @@ function paginate(blocks, cols, dec) {
         return Math.ceil(Math.max(1, plain(b, dec).length) / cpl) + 0.7;
       case 'eq':
         return 3.4;
+      case 'plot':
+        return cols === 2 ? 12 : 14;
       case 'fig':
         return cols === 2 ? (b.span ? 7 : 11) : 13;
       case 'img':
@@ -736,6 +1375,38 @@ function gamepad() {
 function skeleton(tpl) {
   const B = x => ({ id: uid(), ...x });
   if (tpl === 'tom') return [B({ type: 'p', segs: [t('')] })];
+  if (tpl === 'oving')
+    return [
+      B({ type: 'h1', text: 'Oppgave 1' }),
+      B({ type: 'h2', text: 'a)' }),
+      B({ type: 'p', segs: [t('')] }),
+      B({ type: 'h2', text: 'b)' }),
+      B({ type: 'p', segs: [t('')] }),
+      B({ type: 'h1', text: 'Oppgave 2' }),
+      B({ type: 'h2', text: 'a)' }),
+      B({ type: 'p', segs: [t('')] })
+    ];
+  if (tpl === 'forarbeid')
+    return [
+      B({ type: 'h1', text: 'Teori' }),
+      B({ type: 'p', segs: [t('')] }),
+      B({ type: 'h1', text: 'Beregninger' }),
+      B({ type: 'eq', src: 'v_R = R \\cdot i', label: 'eq:' + uid().slice(0, 4) }),
+      B({ type: 'p', segs: [t('')] }),
+      B({ type: 'h1', text: 'Simulering' }),
+      B({ type: 'p', segs: [t('')] }),
+      B({ type: 'h1', text: 'Plan for labdagen' }),
+      B({
+        type: 'table',
+        style: 'list',
+        caption: 'Utstyr',
+        label: 'tab:utstyr',
+        rows: [
+          ['Antall', 'Komponent', 'Merknad'],
+          ['', '', '']
+        ]
+      })
+    ];
   if (tpl === 'lab')
     return [
       B({ type: 'h1', text: 'Mål' }),
@@ -792,6 +1463,17 @@ function makeDocs() {
     ...base,
     id: 'd4',
     title: 'Gamepad-emulator med NAND-porter',
+    bib: [
+      {
+        type: 'misc',
+        key: 'ti74hc00',
+        author: 'Texas Instruments',
+        title: 'SNx4HC00 Quadruple 2-Input Positive-NAND Gates',
+        journal: 'Datablad SCLS181F',
+        year: '2016',
+        url: 'https://www.ti.com/lit/ds/symlink/sn74hc00.pdf'
+      }
+    ],
     meta: 'Oblig 4 · redigert nå',
     blocks: [
       {
@@ -1199,6 +1881,18 @@ function parseDoc(src, doc, S) {
       raw.push({ env: m[1] ? 'h2' : 'h1', text: l, line: i + 1 });
       i++;
       continue;
+    }
+    // Litteraturlisten lages fra dokumentets kilder (doc.bib); den genererte listen leses ikke inn som blokk
+    if (/^\\begin\{thebibliography\}/.test(l) && (doc.bib || []).length) {
+      let j = i;
+      while (j < ei && !lines[j].includes('\\end{thebibliography}')) j++;
+      const own = docCode({ ...doc, pre: [] }, { ...S, ...settings }).map(x => x.s);
+      const gb = own.indexOf(own.find(x => /^\\begin\{thebibliography\}/.test(x))),
+        ge = own.indexOf('\\end{thebibliography}');
+      if (gb >= 0 && texNorm(own.slice(gb, ge + 1).join('\n')) === texNorm(lines.slice(i, j + 1).join('\n'))) {
+        i = j + 1;
+        continue;
+      }
     }
     // multicols er bare en ramme: start og slutt blir egne små blokker, innholdet redigeres visuelt
     if (MULTICOLS_MARK.test(l)) {
@@ -3162,6 +3856,29 @@ export {
   u,
   sy,
   rf,
+  citeSeg,
+  MATH,
+  SPELL_NB,
+  SPELL_EN,
+  parseCSV,
+  parseGrid,
+  plotSvg,
+  plotLines,
+  citeNums,
+  bibTxt,
+  bibList,
+  bibKey,
+  parseBibtex,
+  toBibtex,
+  wdiff,
+  blockTxt,
+  textFields,
+  SP_LINE,
+  isSpice,
+  SPU,
+  SPP,
+  spiceVal,
+  spiceToTikz,
   pf,
   un,
   fmtNum,

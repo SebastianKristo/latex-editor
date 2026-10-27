@@ -48,14 +48,27 @@ export const explain = msg => (EXPLAIN.find(([re]) => re.test(msg)) || [, ''])[1
 
 // Feil («! …» med «l.NN») og advarsler («LaTeX Warning: … on input line NN») fra latexmk-loggen.
 // Linjenumrene gjelder main.tex, som er den samme koden som vises i kodevisningen.
+// TeX bryter logglinjer etter 79 tegn; en melding som fyller hele linjen fortsetter på neste.
+const MAX_LINE = 79;
+function unwrap(lines, i) {
+  let s = lines[i], k = i;
+  while (lines[k] && lines[k].length >= MAX_LINE && lines[k + 1] !== undefined) s += lines[++k];
+  return s;
+}
+
 export function texErrors(log) {
-  const out = [], lines = log.split('\n');
+  const out = [], lines = log.replace(/\r/g, '').split('\n');
   lines.forEach((l, i) => {
     // «==> Fatal error occurred» er bare følgen av feilen over, ikke en egen feil
     if (!l.startsWith('! ') || (/^!\s*==> Fatal error/.test(l) && out.length)) return;
-    const ln = lines.slice(i, i + 8).join('\n').match(/l\.(\d+)/);
-    const message = l.slice(2).replace(/^LaTeX Error: /, '');
-    out.push({ message, line: ln ? Number(ln[1]) : null, hint: explain(message) });
+    const near = lines.slice(i, i + 8), at = near.findIndex(x => /^l\.\d+/.test(x));
+    const ln = at >= 0 ? near[at].match(/^l\.(\d+)/) : null;
+    const message = unwrap(lines, i).slice(2).replace(/^LaTeX Error: /, '').replace(/\.$/, '.');
+    let hint = explain(message);
+    // Ukjent kommando: TeX stopper rett etter den, så den står sist på l.NN-linjen
+    const cs = /Undefined control sequence/.test(message) && at >= 0 && near[at].match(/(\\[A-Za-z@]+)\s*$/);
+    if (cs) hint = `${cs[1]} er ikke definert. Sjekk stavemåten, definer den i preamblen (for eksempel \\newcommand{${cs[1]}}[1]{…}), eller last pakken som har den.`;
+    out.push({ message, line: ln ? Number(ln[1]) : null, hint });
   });
   return out;
 }
@@ -66,7 +79,8 @@ export function texWarnings(log) {
   log.replace(/\r/g, '').split(/\n(?=[^\s(])|\n\n/).forEach(chunk => {
     const t = chunk.replace(/\n/g, ' ').replace(/\s+/g, ' ').trim();
     const m = t.match(/^(?:LaTeX|Package \S+) Warning: (.*?)(?: on input line (\d+))?\.?$/);
-    if (!m || /^There were undefined references|^Label\(s\) may have changed|^Rerun to get/.test(m[1])) return;
+    // Shell escape er av med vilje (sikkerhet); epstopdf melder det ved hver kompilering
+    if (!m || /^There were undefined references|^Label\(s\) may have changed|^Rerun to get|^Shell escape feature is not enabled/.test(m[1])) return;
     const k = m[1] + '|' + m[2];
     if (seen.has(k)) return;
     seen.add(k);

@@ -1,6 +1,7 @@
 name: Desktop
 # Bygger Kobling for macOS (.dmg, universal: Apple Silicon + Intel) og Windows (.msi)
 # og legger filene i en GitHub Release for taggen. Start med:  git tag v0.1.0 && git push origin v0.1.0
+# Når desktop-byggene er ferdige, bygges mobilappen (mobile.yml) og legges i samme release.
 on:
   push:
     tags: ['v*']
@@ -50,5 +51,17 @@ jobs:
             (eller `xattr -dr com.apple.quarantine /Applications/Kobling.app`).
 
             **Windows:** last ned `Kobling_*_x64_en-US.msi` og kjør den. SmartScreen kan advare fordi appen ikke er signert: Mer info › Kjør likevel.
+
+            **Android:** last ned `Kobling_*.apk` på telefonen og åpne den (tillat installasjon fra nettleseren eller Filer).
+
+            **iPhone og iPad:** `Kobling_*.ipa` er usignert. Installer den med din egen Apple-ID via AltStore eller Sideloadly.
           releaseDraft: false
           prerelease: false
+
+  mobile:
+    needs: build
+    if: ${{ !cancelled() }}
+    uses: ./.github/workflows/mobile.yml
+    with:
+      tag: ${{ github.event.inputs.tag || github.ref_name }}
+    secrets: inherit

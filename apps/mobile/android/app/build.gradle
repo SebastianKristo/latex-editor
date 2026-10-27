@@ -1,0 +1,72 @@
+apply plugin: 'com.android.application'
+
+// Versjonen settes fra release-taggen i CI (-PkoblingVersion=0.3.0); ellers fra apps/mobile/package.json.
+def koblingVersion = (project.findProperty('koblingVersion') ?: new groovy.json.JsonSlurper().parse(file('../../package.json')).version).toString()
+def kv = koblingVersion.tokenize('.').collect { it.replaceAll(/\D.*/, '').toInteger() }
+// Fast signeringsnøkkel fra hemmeligheter i CI, slik at nye versjoner kan installeres over de gamle.
+def ks = System.getenv('KOBLING_KEYSTORE')
+
+android {
+    namespace = "app.kobling.mobile"
+    compileSdk = rootProject.ext.compileSdkVersion
+    defaultConfig {
+        applicationId "app.kobling.mobile"
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
+        versionCode kv[0] * 10000 + kv[1] * 100 + kv[2]
+        versionName koblingVersion
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        aaptOptions {
+             // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
+             // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
+            ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
+        }
+    }
+    signingConfigs {
+        release {
+            if (ks) {
+                storeFile file(ks)
+                storePassword System.getenv('KOBLING_KEYSTORE_PASSWORD')
+                keyAlias System.getenv('KOBLING_KEY_ALIAS')
+                keyPassword System.getenv('KOBLING_KEY_PASSWORD')
+            }
+        }
+    }
+    buildTypes {
+        release {
+            // Uten nøkkel signeres APK-en med debug-nøkkelen, så den likevel kan installeres.
+            signingConfig ks ? signingConfigs.release : signingConfigs.debug
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+        }
+    }
+}
+
+repositories {
+    flatDir{
+        dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'
+    }
+}
+
+dependencies {
+    implementation fileTree(include: ['*.jar'], dir: 'libs')
+    implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
+    implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
+    implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
+    implementation project(':capacitor-android')
+    testImplementation "junit:junit:$junitVersion"
+    androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
+    androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
+    implementation project(':capacitor-cordova-android-plugins')
+}
+
+apply from: 'capacitor.build.gradle'
+
+try {
+    def servicesJSON = file('google-services.json')
+    if (servicesJSON.text) {
+        apply plugin: 'com.google.gms.google-services'
+    }
+} catch(Exception e) {
+    logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
+}

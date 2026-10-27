@@ -112,7 +112,8 @@ export class ServerSession {
   update(ps) {
     const s = this.app.state;
     if (ps.cur !== s.cur) { this.pdf = null; this.app.setState({ pdfBoxes: [], people: [] }); this.bind(s.cur); this.loadPeople() }
-    else if (!this.remote && this.ys && this.ys.synced) {
+    // Endringer går inn i Yjs når serveren har svart, eller (uten nett) når den lokale kopien er lastet
+    else if (!this.remote && this.ys && (this.ys.synced || (this.ys.local && !isEmptyY(this.ys.doc)))) {
       if (ps.docs !== s.docs) {
         const d = s.docs.find(x => x.id === s.cur);
         if (d && d !== ps.docs.find(x => x.id === s.cur)) applyDocToY(this.ys.doc, d, 'app');

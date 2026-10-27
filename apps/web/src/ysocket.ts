@@ -16,6 +16,7 @@ export class YSocket {
   doc = new Y.Doc();
   awareness = new awarenessProtocol.Awareness(this.doc);
   synced = false;
+  local = false; // lokal kopi (IndexedDB) er lastet
   onSynced: () => void = () => {};
   onLocal: () => void = () => {};
   onDenied: () => void = () => {};
@@ -31,7 +32,7 @@ export class YSocket {
     if (opts.persist !== false && typeof indexedDB !== 'undefined') {
       try {
         this.idb = new IndexeddbPersistence('kobling:' + (serverBase() || location.origin) + ':' + docId, this.doc);
-        this.idb.on('synced', () => { if (!this.closed) this.onLocal() });
+        this.idb.on('synced', () => { if (!this.closed) { this.local = true; this.onLocal() } });
       } catch { this.idb = null }
     }
     this.doc.on('update', (u: Uint8Array, origin: any) => {

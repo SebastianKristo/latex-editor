@@ -40,6 +40,7 @@ Første gang serveren startes uten brukere viser klienten «Opprett administrato
   - Admin-bryter for versjonshistorikk.
 - **Kompileringsloggen** samler feilsjekken i klienten og den ekte `latexmk`-loggen fra serveren (feil og advarsler med linjenummer og norsk forklaring). Feil fra feilsjekken stopper kompileringen, som i prototypen.
 - **Versjonshistorikken** ligger i et eget Yjs-rom per dokument. Når admin slår av «Vis versjonshistorikk», nekter serveren vanlige brukere tilgang til rommet og kobler fra dem som er inne.
+- **`multicols`** er en ramme: `\begin{multicols}{2}` og `\end{multicols}` blir egne små blokker («Start på to spalter»), og innholdet imellom kan redigeres visuelt. En blokk som ikke kan skrives tilbake uten tap (for eksempel en tabell med `[H]`, `\small` eller egne kolonner), beholdes som LaTeX-blokk.
 - **LaTeX-koden kan redigeres direkte** i «Kode» og «Delt». Endringer leses tilbake til blokker, og egne `\usepackage`-linjer tas vare på. LaTeX som ikke passer en kjent blokktype (for eksempel `align` eller egne makroer), blir en «LaTeX»-blokk som skrives ut uendret. Innlimt LaTeX i den visuelle editoren blir også til blokker, og «{ } LaTeX» setter inn en tom LaTeX-blokk.
 - **TikZ- og CircuiTikZ-figurer i forhåndsvisningen** (README i handoff, §9):
   - Ved hver kompilering trekker serveren ut hvert `tikzpicture`/`circuitikz`-miljø, inkludert `\resizebox`/`\scalebox` rundt, og kompilerer det for seg med `standalone` og samme preamble. `dvisvgm` gjør resultatet om til SVG.
@@ -111,7 +112,7 @@ Imaget bygger på Debian 13 (trixie, TeX Live 2024). Grunnimaget kan overstyres 
   - Delingslenken bruker DuckDNS-adressen.
   - Oppdateringsfanen sjekker ekte GitHub Releases og viser `update.sh`.
   - Enter gir `\\`, angre og gjør om synkroniseres, nytt filnavn oppdaterer `\includegraphics`, og et skjult sidepanel huskes.
-- **Kjernen:** 115 tester (blant annet at klient og server får samme figurnøkkel). Rundtur visuell → LaTeX → visuell for alle blokker i eksemplene. Diodekretsen fra `main.tex` importeres og eksporteres uten tap. Yjs-modellen fletter samtidige endringer.
+- **Kjernen:** 118 tester (blant annet at klient og server får samme figurnøkkel). Rundtur visuell → LaTeX → visuell for alle blokker i eksemplene. Diodekretsen fra `main.tex` importeres og eksporteres uten tap. Yjs-modellen fletter samtidige endringer.
 - **Serveren:** 26 tester, blant annet figurer med ekte `latex` + `dvisvgm` (mellomlager, tilgang, linjenummer ved feil), lenker via DuckDNS, og oppdatering (kanaler, bestilling til `kobling-update`, status etter omstart, Docker). Ikke-admin får 403 på alle admin-API-er. Invitasjoner og roller fungerer. Lesere og kommentatorer begrenses i Yjs. Varsel om nye kommentarer går på e-post. Utlogging, HTTPS-servering og DuckDNS-TXT er dekket.
 - **LaTeX:** alle 5 eksempeldokumentene kompilerer med `latexmk` uten feil, med én og med to spalter (lokalt med TeX Live 2023, og i Docker-imaget).
 - **I nettleseren (Playwright mot ekte server):**

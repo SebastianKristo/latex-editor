@@ -1098,6 +1098,7 @@ const qtyBack = s =>
   });
 const cellBack = s => unesc(qtyBack(s.replace(/\\textbf\{([^}]*)\}/g, '$1')).trim());
 const wsn = s => (s || '').replace(/%.*$/gm, '').replace(/\s+/g, ' ').trim();
+const MULTICOLS_MARK = /^\\(begin\{multicols\*?\}(\[[^\]]*\])?\{[^}]*\}|end\{multicols\*?\})\s*(%.*)?$/;
 function parseDoc(src, doc, S) {
   const lines = src.split('\n'),
     E = (line, msg) => {
@@ -1199,6 +1200,12 @@ function parseDoc(src, doc, S) {
       i++;
       continue;
     }
+    // multicols er bare en ramme: start og slutt blir egne små blokker, innholdet redigeres visuelt
+    if (MULTICOLS_MARK.test(l)) {
+      raw.push({ env: 'raw', text: lines[i], line: i + 1 });
+      i++;
+      continue;
+    }
     if ((m = l.match(/^\\begin\{([^}]+)\}/))) {
       const env = m[1],
         b = '\\begin{' + env + '}',
@@ -1218,7 +1225,7 @@ function parseDoc(src, doc, S) {
     const st = i;
     while (i < ei) {
       const x = lines[i].trim();
-      if (!x || (i > st && /^\\(begin\{|section|subsection)/.test(x))) break;
+      if (!x || (i > st && (/^\\(begin\{|section|subsection)/.test(x) || MULTICOLS_MARK.test(x)))) break;
       i++;
     }
     raw.push({ env: 'p', text: lines.slice(st, i).join('\n'), line: st + 1 });
@@ -1231,7 +1238,7 @@ function parseDoc(src, doc, S) {
     if (k < 0) k = 0;
     return q.length ? q.splice(k, 1)[0] : null;
   };
-  const blocks = raw.map(r => {
+  const conv = r => {
     try {
       const cap = () => {
           const m = r.text.match(/\\caption\{(.*)\}/);
@@ -1361,6 +1368,19 @@ function parseDoc(src, doc, S) {
     } catch (e) {
       E(r.line, e.msg || e.message || String(e));
     }
+  };
+  // En blokk som ikke kan skrives tilbake uten tap (f.eks. en tabell med [H], \small eller
+  // flere kolonner enn malen har), beholdes som LaTeX. Kretser gjøres bevisst om til kretseditoren.
+  const S2 = { ...S, ...settings };
+  const blocks = raw.map(r => {
+    const b = conv(r);
+    if (!b || b.type === 'raw' || b.type === 'fig' || b.type === 'img') return b;
+    const back = docCode({ title: '', authors: '', group: '', pre: [], blocks: [b] }, S2)
+      .filter(l => l.bid === b.id)
+      .map(l => l.s)
+      .join('\n');
+    if (texNorm(back) === texNorm(r.text)) return b;
+    return { ...(take('raw') || { id: uid(), type: 'raw' }), src: r.text };
   });
   return { title, authors, group, pre, blocks, settings };
 }
@@ -2040,6 +2060,20 @@ function texRender(src, ctx) {
   return '<div style="text-wrap:pretty">' + R(src) + '</div>';
 }
 function rawHtml(src, ctx) {
+  // Start og slutt på multicols er egne blokker; de vises som en stiplet markør
+  const mc = (src || '').trim().match(MULTICOLS_MARK);
+  if (mc) {
+    const n = (mc[0].match(/\}\{(\d+)\}/) || [])[1],
+      word = { 2: 'to', 3: 'tre', 4: 'fire' }[n] || n;
+    const line = '<span style="flex:1;border-top:1px dashed currentColor;opacity:.5"></span>';
+    return (
+      '<div style="display:flex;align-items:center;gap:.7em;font-size:.78em;opacity:.65;font-family:Geist Mono,monospace;margin:.2em 0">' +
+      line +
+      (/^\\begin/.test(mc[0]) ? 'Start på ' + word + ' spalter' : 'Slutt på spalter') +
+      line +
+      '</div>'
+    );
+  }
   return texRender(src || '', ctx || {});
 }
 const ENV_BUILTIN = new Set(

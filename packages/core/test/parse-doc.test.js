@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { makeDocs, docCode, parseDoc, lintTex, mergePre, DEF_SET } from '../src/index.js';
+import { makeDocs, docCode, parseDoc, lintTex, mergePre, rawHtml, DEF_SET } from '../src/index.js';
 
 const S = { ...DEF_SET };
 const code = (d, s = S) => docCode(d, s).map(l => l.s).join('\n');
@@ -16,7 +16,7 @@ describe('parseDoc (redigerbar kode, v2)', () => {
 
   it('ukjent LaTeX blir raw ordrett, egen preamble havner i pre', () => {
     const d = makeDocs()[1];
-    const extra = '\\begin{multicols}{2}\nTo spalter her.\n\\end{multicols}';
+    const extra = '\\begin{minipage}{0.5\\linewidth}\nHalv bredde.\n\\end{minipage}';
     const tex = code(d).replace('\\usepackage[norsk]{cleveref}', '\\usepackage[norsk]{cleveref}\n\\usepackage{multicol}')
       .replace('\\maketitle', '\\maketitle\n\n' + extra);
     const r = parseDoc(tex, d, S);
@@ -149,5 +149,36 @@ describe('innlimt preamble slås sammen setning for setning', () => {
     const a = ['\\newcommand{\\a}[1]{%', '  #1', '}'];
     const b = ['\\newcommand{\\b}[1]{%', '  #1', '}', '\\newcommand{\\a}[1]{%', '  #1', '}', '\\usetikzlibrary{matrix}'];
     expect(mergePre(a, b)).toEqual([...a, '\\newcommand{\\b}[1]{%', '  #1', '}', '\\usetikzlibrary{matrix}']);
+  });
+});
+
+describe('multicols er en ramme rundt vanlige blokker', () => {
+  const d0 = { ...makeDocs()[0], blocks: [] };
+  const src = ['\\documentclass{article}', '\\usepackage{multicol}', '\\usepackage{booktabs}', '\\begin{document}',
+    '\\begin{multicols}{2}', '', '\\section{Konklusjon}', 'Kretsen virket.', '',
+    '\\begin{table}[H]', '\\centering', '\\small', '\\begin{tabular}{c|cccc}', 'a & b & c & d & e\\\\', '\\end{tabular}', '\\end{table}', '',
+    '\\end{multicols}', '\\end{document}'].join('\n');
+  const r = parseDoc(src, d0, S);
+
+  it('start og slutt blir egne LaTeX-blokker, innholdet blir overskrift og avsnitt', () => {
+    expect(r.blocks.map(b => b.type)).toEqual(['raw', 'h1', 'p', 'raw', 'raw']);
+    expect(r.blocks[0].src).toBe('\\begin{multicols}{2}');
+    expect(r.blocks[4].src).toBe('\\end{multicols}');
+    expect(r.blocks[1].text).toBe('Konklusjon');
+  });
+
+  it('en tabell som ikke kan skrives tilbake uten tap, beholdes som LaTeX', () => {
+    expect(r.blocks[3].src).toContain('\\begin{tabular}{c|cccc}');
+    expect(r.blocks[3].src).toContain('\\small');
+  });
+
+  it('rundturen er stabil, og start/slutt vises som markør', () => {
+    const S2 = { ...S, ...r.settings };
+    const tex = code({ ...d0, ...r }, S2);
+    expect(tex).toContain('\\begin{multicols}{2}\n\n\\section{Konklusjon}');
+    const r2 = parseDoc(tex, { ...d0, ...r }, S2);
+    expect(code({ ...d0, ...r, ...r2 }, { ...S2, ...r2.settings })).toBe(tex);
+    expect(rawHtml('\\begin{multicols}{2}', {})).toContain('Start på to spalter');
+    expect(rawHtml('\\end{multicols}', {})).toContain('Slutt på spalter');
   });
 });

@@ -7,11 +7,11 @@
 // Blokker er atomære verdier: samtidige endringer i ulike blokker flettes, i samme blokk vinner siste.
 import * as Y from 'yjs';
 
-export const META_KEYS = ['title', 'authors', 'group', 'folder', 'meta', 'pre', 'files'];
+export const META_KEYS = ['title', 'authors', 'group', 'folder', 'meta', 'pre', 'files', 'bib'];
 export const HISTORY_MAX = 60;
 
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
-const EMPTY = { pre: [], files: [] };
+const EMPTY = { pre: [], files: [], bib: [] };
 
 export function docFromY(ydoc, id) {
   const meta = ydoc.getMap('meta'), blocks = ydoc.getMap('blocks');

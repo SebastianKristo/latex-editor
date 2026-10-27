@@ -10,7 +10,7 @@ import App from './App.js';
 import { detectPlatform, windowControls } from './platform';
 import { api, isDesktop } from './api';
 import { Login, LoginMode } from './Login';
-import { ServerSession } from './server-mode.js';
+import { ServerSession, readCache } from './server-mode.js';
 
 (window as any).katex = katex;
 setTemplate(templateSrc, windowControls);
@@ -25,9 +25,9 @@ const renderDemo = () => root.render(React.createElement(App as any, { platform,
 const renderLogin = (mode: LoginMode, error?: string) =>
   root.render(React.createElement(Login, { mode, error, platform, onDone: async (user: any) => start(user, (await api('GET', '/api/me').catch(() => ({}))).access) }));
 
-async function start(user: any, access?: any) {
+async function start(user: any, access?: any, offlineDocs?: any[]) {
   try {
-    let docs = await api('GET', '/api/docs');
+    let docs: any[] = offlineDocs || await api('GET', '/api/docs');
     if (!docs.length) {
       await api('POST', '/api/docs', { doc: { title: 'Rapportmal ELI1300', authors: user.name, group: '', folder: 'Privat', meta: 'Opprettet nå', blocks: skeleton('rapport') } });
       docs = await api('GET', '/api/docs');
@@ -44,6 +44,9 @@ async function boot() {
   try {
     await api('GET', '/api/health', undefined, { timeout: 3000 });
   } catch {
+    // Uten nett: åpne med det som er lagret lokalt fra sist (dokumentene ligger i IndexedDB)
+    const c = readCache();
+    if (c && c.user && c.docs && c.docs.length) return start(c.user, c.access, c.docs);
     if (isDesktop()) return renderLogin('server');
     if (import.meta.env.DEV) return renderDemo();
     return renderLogin('login', 'Fikk ikke kontakt med serveren. Prøv igjen om litt.');
@@ -58,5 +61,9 @@ async function boot() {
     return renderLogin('login');
   }
 }
+
+// Uten nett: appen lastes fra service worker-bufferen (bare på nettet; desktop og mobil har filene lokalt)
+if (!isDesktop() && !import.meta.env.DEV && 'serviceWorker' in navigator && location.protocol.startsWith('http'))
+  navigator.serviceWorker.register('/sw.js').catch(() => {});
 
 boot();

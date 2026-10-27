@@ -376,194 +376,6 @@ function parseGrid(tx) {
   const n = Math.max(...rows.map(r => r.length));
   return rows.map(r => [...r, ...Array(n - r.length).fill('')]);
 }
-function plotSvg(b, o) {
-  o = o || {};
-  const d = parseCSV(b.csv),
-    E = React.createElement,
-    W = o.w || 460,
-    PH = o.h || 240,
-    logx = b.kind === 'bode';
-  const rows = d.rows.filter(r => !logx || r[0] > 0);
-  if (rows.length < 2) return null;
-  const panels = logx && d.head.length >= 3 ? [[1], [2]] : [d.head.slice(1).map((_, i) => i + 1)],
-    L = 54,
-    R = 14,
-    T = 12,
-    B = 40,
-    H = panels.length * PH;
-  const fx = logx ? Math.log10 : x => x,
-    xv = rows.map(r => fx(r[0])),
-    x0 = Math.min(...xv),
-    x1 = Math.max(...xv),
-    X = v => L + ((fx(v) - x0) / (x1 - x0 || 1)) * (W - L - R);
-  const nice = (a, c, n) => {
-    const span = c - a || 1,
-      s0 = Math.pow(10, Math.floor(Math.log10(span / n))),
-      m = [1, 2, 2.5, 5, 10].map(k => k * s0).find(k => span / k <= n) || s0 * 10,
-      out = [];
-    for (let i = Math.ceil(a / m); i * m <= c + m * 1e-6; i++) out.push(+(i * m).toPrecision(10));
-    return out;
-  };
-  const fmt = v => {
-    const a = Math.abs(v);
-    return (
-      a >= 1e6
-        ? +(v / 1e6).toPrecision(4) + 'M'
-        : a >= 1e3
-          ? +(v / 1e3).toPrecision(4) + 'k'
-          : String(+v.toPrecision(4))
-    ).replace('.', ',');
-  };
-  const xt = logx
-    ? (() => {
-        const q = [];
-        for (let k = Math.ceil(x0 - 1e-9); k <= Math.floor(x1 + 1e-9); k++) q.push(Math.pow(10, k));
-        return q;
-      })()
-    : nice(x0, x1, 6);
-  const lab = s =>
-    (s || '')
-      .replace(/\\qty\{([^}]*)\}\{[^}]*\}/g, '$1')
-      .replace(/[$\\{}]/g, '')
-      .replace(/_/g, '');
-  const COL = ['#1f5fbf', '#c0392b', '#2e8b57', '#8e44ad', '#d35400'],
-    K = [],
-    ink = '#222',
-    grid = '#e3e1dc';
-  panels.forEach((cols, pi) => {
-    const top = pi * PH + T,
-      bot = pi * PH + PH - B,
-      ys = [];
-    cols.forEach(c =>
-      rows.forEach(r => {
-        if (isFinite(r[c])) ys.push(r[c]);
-      })
-    );
-    if (!ys.length) return;
-    let y0 = Math.min(...ys),
-      y1 = Math.max(...ys);
-    if (y0 === y1) {
-      y0 -= 1;
-      y1 += 1;
-    }
-    const yt = nice(y0, y1, 5);
-    y0 = Math.min(y0, yt[0]);
-    y1 = Math.max(y1, yt[yt.length - 1]);
-    const Y = v => bot - ((v - y0) / (y1 - y0 || 1)) * (bot - top);
-    if (logx)
-      for (let k = Math.floor(x0); k < x1; k++)
-        for (let mm = 2; mm < 10; mm++) {
-          const v = mm * Math.pow(10, k),
-            f = fx(v);
-          if (f > x0 && f < x1)
-            K.push(
-              E('line', {
-                key: 'gm' + pi + '_' + v,
-                x1: X(v),
-                x2: X(v),
-                y1: top,
-                y2: bot,
-                stroke: grid,
-                strokeWidth: 0.5
-              })
-            );
-        }
-    yt.forEach(v => {
-      K.push(
-        E('line', { key: 'gy' + pi + '_' + v, x1: L, x2: W - R, y1: Y(v), y2: Y(v), stroke: grid, strokeWidth: 1 })
-      );
-      K.push(
-        E(
-          'text',
-          { key: 'ty' + pi + '_' + v, x: L - 6, y: Y(v) + 4, textAnchor: 'end', fontSize: 11, fill: ink },
-          fmt(v)
-        )
-      );
-    });
-    xt.forEach(v => {
-      K.push(
-        E('line', { key: 'gx' + pi + '_' + v, x1: X(v), x2: X(v), y1: top, y2: bot, stroke: grid, strokeWidth: 1 })
-      );
-      if (pi === panels.length - 1)
-        K.push(
-          E('text', { key: 'tx' + v, x: X(v), y: bot + 15, textAnchor: 'middle', fontSize: 11, fill: ink }, fmt(v))
-        );
-    });
-    K.push(
-      E('rect', {
-        key: 'ax' + pi,
-        x: L,
-        y: top,
-        width: W - L - R,
-        height: bot - top,
-        fill: 'none',
-        stroke: ink,
-        strokeWidth: 1
-      })
-    );
-    cols.forEach((c, ci) =>
-      K.push(
-        E('polyline', {
-          key: 's' + pi + '_' + c,
-          points: rows
-            .filter(r => isFinite(r[c]))
-            .map(r => X(r[0]).toFixed(1) + ',' + Y(r[c]).toFixed(1))
-            .join(' '),
-          fill: 'none',
-          stroke: COL[(pi + ci) % COL.length],
-          strokeWidth: 2,
-          strokeLinejoin: 'round'
-        })
-      )
-    );
-    K.push(
-      E(
-        'text',
-        {
-          key: 'yl' + pi,
-          transform: 'translate(13 ' + (top + bot) / 2 + ') rotate(-90)',
-          textAnchor: 'middle',
-          fontSize: 12,
-          fill: ink
-        },
-        lab(pi === 0 ? b.ylabel || d.head[1] : d.head[2])
-      )
-    );
-    if (cols.length > 1)
-      cols.forEach((c, ci) => {
-        K.push(
-          E('line', {
-            key: 'lg' + c,
-            x1: W - R - 120,
-            x2: W - R - 102,
-            y1: top + 14 + ci * 15,
-            y2: top + 14 + ci * 15,
-            stroke: COL[ci % COL.length],
-            strokeWidth: 2
-          })
-        );
-        K.push(
-          E('text', { key: 'lt' + c, x: W - R - 96, y: top + 18 + ci * 15, fontSize: 11, fill: ink }, lab(d.head[c]))
-        );
-      });
-  });
-  K.push(
-    E(
-      'text',
-      { key: 'xl', x: (L + W - R) / 2, y: H - 8, textAnchor: 'middle', fontSize: 12, fill: ink },
-      lab(b.xlabel || d.head[0])
-    )
-  );
-  return E(
-    'svg',
-    {
-      viewBox: '0 0 ' + W + ' ' + H,
-      width: '100%',
-      style: { maxWidth: o.max || W, display: 'block', fontFamily: "'STIX Two Text',serif", background: '#fff' }
-    },
-    K
-  );
-}
 function plotLines(b) {
   const d = parseCSV(b.csv),
     logx = b.kind === 'bode',
@@ -639,52 +451,75 @@ function bibKey(e) {
     .pop();
   return (slug(a).replace(/-/g, '') || 'kilde') + (e.year || '');
 }
+// BibTeX inn og ut uten tap: alle felt tas vare på i originalform (også {Store} bokstaver),
+// og de vanlige feltene finnes i tillegg som rene tekster til visning og redigering.
 function parseBibtex(tx) {
   const out = [],
     re = /@(\w+)\s*\{\s*([^,\s]+)\s*,([\s\S]*?)\}\s*(?=@|$)/g;
   let m;
   while ((m = re.exec(tx || ''))) {
-    const f = {};
-    m[3].replace(/(\w+)\s*=\s*(?:\{((?:[^{}]|\{[^{}]*\})*)\}|"([^"]*)"|(\w+))/g, (_, k, a, b, c) => {
-      f[k.toLowerCase()] = (a != null ? a : b != null ? b : c || '').replace(/[{}]/g, '').replace(/\s+/g, ' ').trim();
+    const raw = [],
+      f = {};
+    m[3].replace(/(\w+)\s*=\s*(?:\{((?:[^{}]|\{(?:[^{}]|\{[^{}]*\})*\})*)\}|"([^"]*)"|(\w+))/g, (_, k, a, b, c) => {
+      const v = a != null ? a : b != null ? b : c || '';
+      raw.push([k.toLowerCase(), v]);
+      f[k.toLowerCase()] = v.replace(/[{}]/g, '').replace(/\s+/g, ' ').trim();
       return '';
     });
+    const jk = ['journal', 'booktitle', 'publisher'].find(k => f[k]) || 'journal';
     out.push({
       type: m[1].toLowerCase(),
       key: m[2],
       author: (f.author || '').replace(/\s+and\s+/g, ' og '),
       title: f.title || '',
-      journal: f.journal || f.booktitle || f.publisher || '',
+      journal: f[jk] || '',
       year: f.year || '',
       doi: f.doi || '',
-      url: f.url || ''
+      url: f.url || '',
+      raw
     });
   }
   return out;
 }
 function toBibtex(bib) {
+  const plain = v => String(v || '').replace(/[{}]/g, '').replace(/\s+/g, ' ').trim();
   return (
     (bib || [])
-      .map(
-        e =>
+      .map(e => {
+        // felt som er endret i Kobling, skrives fra de rene verdiene; resten som de var
+        const mine = {
+          author: (e.author || '').replace(/ og /g, ' and '),
+          title: e.title,
+          [e.type === 'article' ? 'journal' : 'publisher']: e.journal,
+          year: e.year,
+          doi: e.doi,
+          url: e.url
+        };
+        const raw = e.raw || [],
+          seen = new Set(),
+          fields = [];
+        raw.forEach(([k, v]) => {
+          seen.add(k);
+          const cur = k in mine ? mine[k] : k === 'booktitle' && !raw.some(x => x[0] === 'journal' || x[0] === 'publisher') ? e.journal : undefined;
+          if (k === 'booktitle') seen.add(e.type === 'article' ? 'journal' : 'publisher');
+          fields.push([k, cur !== undefined && plain(cur) !== plain(k === 'author' ? v.replace(/\s+and\s+/g, ' and ') : v) ? cur : v]);
+        });
+        Object.entries(mine).forEach(([k, v]) => {
+          if (!seen.has(k) && v) fields.push([k, v]);
+        });
+        return (
           '@' +
           (e.type || 'misc') +
           '{' +
           e.key +
           ',\n' +
-          [
-            ['author', (e.author || '').replace(/ og /g, ' and ')],
-            ['title', e.title],
-            [e.type === 'article' ? 'journal' : 'publisher', e.journal],
-            ['year', e.year],
-            ['doi', e.doi],
-            ['url', e.url]
-          ]
+          fields
             .filter(x => x[1])
             .map(([k, v]) => '  ' + k + ' = {' + v + '}')
             .join(',\n') +
           '\n}'
-      )
+        );
+      })
       .join('\n\n') + '\n'
   );
 }
@@ -1667,7 +1502,7 @@ function tokSh0(s) {
 const unesc = s => (s || '').replace(/\\([%&#_$])/g, '$1');
 function parseInline(s) {
   const segs = [],
-    re = /\\qty\{([^}]*)\}\{([^}]*)\}|\\cref\{([^}]*)\}|\$([^$]*)\$/g;
+    re = /\\qty\{([^}]*)\}\{([^}]*)\}|\\cref\{([^}]*)\}|\$([^$]*)\$|\\cite\{([^}]*)\}/g;
   let last = 0,
     m;
   while ((m = re.exec(s))) {
@@ -1681,6 +1516,7 @@ function parseInline(s) {
       if (!/^-?\d+([.,]\d+)?$/.test(m[1].trim())) throw new Error('Ugyldig tall i \\qty: ' + m[1]);
       segs.push({ t: 'unit', num: m[1].trim(), prefix: p ? p.k : '', unit: uu.k });
     } else if (m[3] != null) segs.push(rf(m[3].trim()));
+    else if (m[5] != null) m[5].split(',').forEach(k => k.trim() && segs.push(citeSeg(k.trim())));
     else {
       const mm = m[4].match(/^\s*(\\[A-Za-z]+|[A-Za-z])\s*(?:_\{?([^}]*)\}?)?\s*$/);
       if (!mm) throw new Error('Kan ikke tolke $' + m[4] + '$. Bruk f.eks. $v_{s}$.');
@@ -1780,6 +1616,12 @@ const qtyBack = s =>
   });
 const cellBack = s => unesc(qtyBack(s.replace(/\\textbf\{([^}]*)\}/g, '$1')).trim());
 const wsn = s => (s || '').replace(/%.*$/gm, '').replace(/\s+/g, ' ').trim();
+// LaTeX-koden for én blokk
+const blockTex = (b, S) =>
+  docCode({ title: '', authors: '', group: '', pre: [], blocks: [b] }, S)
+    .filter(l => l.bid === b.id)
+    .map(l => l.s)
+    .join('\n');
 const MULTICOLS_MARK = /^\\(begin\{multicols\*?\}(\[[^\]]*\])?\{[^}]*\}|end\{multicols\*?\})\s*(%.*)?$/;
 function parseDoc(src, doc, S) {
   const lines = src.split('\n'),
@@ -1946,7 +1788,7 @@ function parseDoc(src, doc, S) {
         const o = take('raw') || { id: uid(), type: 'raw' };
         return { ...o, src: r.text };
       }
-      if (r.env === 'p' && /^\\(?!qty\{|cref\{)([a-zA-Z]+|\[)/.test(r.text.trim())) {
+      if (r.env === 'p' && /^\\(?!qty\{|cref\{|cite\{)([a-zA-Z]+|\[)/.test(r.text.trim())) {
         const o = take('raw') || { id: uid(), type: 'raw' };
         return { ...o, src: r.text };
       }
@@ -1969,6 +1811,7 @@ function parseDoc(src, doc, S) {
         const o = take('eq') || { id: uid(), type: 'eq', label: 'eq:' + uid().slice(0, 4) };
         return { ...o, ...parseBlock(o, r.text) };
       }
+      if (r.env.startsWith('figure') && /\\begin\{axis\}/.test(r.text)) return plotFrom(r, cap(), lab());
       if (r.env.startsWith('figure')) {
         const span = r.env === 'figure*';
         const tz = r.text.match(/\\begin\{circuitikz\}[\s\S]*?\\end\{circuitikz\}/);
@@ -2018,17 +1861,20 @@ function parseDoc(src, doc, S) {
       }
       if (r.env === 'table') {
         const o = take('table') || { id: uid(), type: 'table', label: 'tab:' + uid().slice(0, 4) };
+        // like mange kolonner som tabellen har (README §11: vilkårlig antall)
         const rows = r.text
           .split('\n')
           .filter(l => l.includes('&'))
-          .map(l => {
-            const c = l
+          .map(l =>
+            l
               .replace(/\\\\.*$/, '')
               .split('&')
-              .map(cellBack);
-            while (c.length < 3) c.push('');
-            return c.slice(0, 3);
-          });
+              .map(cellBack)
+          );
+        const nc = Math.max(0, ...rows.map(c => c.length));
+        rows.forEach(c => {
+          while (c.length < nc) c.push('');
+        });
         if (!rows.length) throw new Error('Fant ingen tabellrader (kolonner skilles med &).');
         return {
           ...o,
@@ -2063,17 +1909,45 @@ function parseDoc(src, doc, S) {
       E(r.line, e.msg || e.message || String(e));
     }
   };
+  // Graf (pgfplots) tilbake til plot-blokk: uendret kode beholder blokken (og CSV-en) som den var,
+  // ellers lages CSV-en fra koordinatene.
+  function plotFrom(r, caption, label) {
+    const same = (pool.plot || []).findIndex(b => texNorm(blockTex(b, { ...S, ...settings })) === texNorm(r.text));
+    if (same >= 0) return pool.plot.splice(same, 1)[0];
+    const o = take('plot') || { id: uid(), type: 'plot', label: 'fig:graf-' + uid().slice(0, 4) };
+    const opt = (t, k) => (t.match(new RegExp(k + '=\\{([^}]*)\\}')) || [])[1] || '';
+    const axes = [...r.text.matchAll(/\\begin\{axis\}\[([^\n]*)\]([\s\S]*?)\\end\{axis\}/g)];
+    if (!axes.length) throw new Error('Fant ingen akse i grafen.');
+    const head = [],
+      cols = [];
+    let xl = '';
+    axes.forEach(a => {
+      const legends = [...a[2].matchAll(/\\addlegendentry\{([^}]*)\}/g)].map(x => unesc(x[1]));
+      [...a[2].matchAll(/coordinates \{([^}]*)\}/g)].forEach((c, i) => {
+        cols.push([...c[1].matchAll(/\(([^,()]+),([^,()]+)\)/g)].map(p => [p[1].trim(), p[2].trim()]));
+        head.push(legends[i] || opt(a[1], 'ylabel'));
+      });
+      xl = opt(a[1], 'xlabel') || xl;
+    });
+    if (!cols.length) throw new Error('Fant ingen datapunkter i grafen.');
+    const rows = cols[0].map((p, i) => [p[0], ...cols.map(c => (c[i] ? c[i][1] : ''))].join(';'));
+    return {
+      ...o,
+      kind: /xmode=log/.test(r.text) ? 'bode' : 'line',
+      csv: [[xl, ...head].join(';'), ...rows].join('\n'),
+      xlabel: xl,
+      ylabel: opt(axes[0][1], 'ylabel'),
+      caption,
+      label: label || o.label
+    };
+  }
   // En blokk som ikke kan skrives tilbake uten tap (f.eks. en tabell med [H], \small eller
   // flere kolonner enn malen har), beholdes som LaTeX. Kretser gjøres bevisst om til kretseditoren.
   const S2 = { ...S, ...settings };
   const blocks = raw.map(r => {
     const b = conv(r);
     if (!b || b.type === 'raw' || b.type === 'fig' || b.type === 'img') return b;
-    const back = docCode({ title: '', authors: '', group: '', pre: [], blocks: [b] }, S2)
-      .filter(l => l.bid === b.id)
-      .map(l => l.s)
-      .join('\n');
-    if (texNorm(back) === texNorm(r.text)) return b;
+    if (texNorm(blockTex(b, S2)) === texNorm(r.text)) return b;
     return { ...(take('raw') || { id: uid(), type: 'raw' }), src: r.text };
   });
   return { title, authors, group, pre, blocks, settings };
@@ -3862,7 +3736,6 @@ export {
   SPELL_EN,
   parseCSV,
   parseGrid,
-  plotSvg,
   plotLines,
   citeNums,
   bibTxt,

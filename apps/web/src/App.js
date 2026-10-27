@@ -37,7 +37,6 @@ import {
   SPELL_EN,
   parseCSV,
   parseGrid,
-  plotSvg,
   plotLines,
   citeNums,
   bibTxt,
@@ -133,7 +132,7 @@ import {
   parseCircuit,
   autoLayout
 } from '@kobling/core';
-import { symEls, drawCircuit } from '@kobling/ui';
+import { symEls, drawCircuit, plotSvg } from '@kobling/ui';
 import { DCLogic } from './dc-runtime';
 import { openChannel } from './sync';
 import * as GEN from '../../../deploy/generators.js';
@@ -3856,7 +3855,7 @@ export default class Component extends DCLogic {
           const wre = /[A-Za-zÆØÅæøåéü]+/g;
           while ((m = wre.exec(v0))) {
             const w = m[0],
-              fix = D[w.toLowerCase()];
+              fix = this._server ? this._server.spellFix(w, lang) : D[w.toLowerCase()];
             if (fix) {
               const rep = w[0] !== w[0].toLowerCase() ? fix[0].toUpperCase() + fix.slice(1) : fix;
               items.push({

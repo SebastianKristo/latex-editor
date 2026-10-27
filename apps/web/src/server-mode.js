@@ -20,6 +20,10 @@ const ago = ms => {
 const toDoc = d => ({ authors: '', group: '', folder: 'Privat', meta: ago(d.updated || Date.now()), blocks: [], ...d });
 // Historikk lagres uten bildedata (de kan være store); bildene hentes fra dokumentet ved gjenoppretting.
 const lean = blocks => blocks.map(b => (b.type === 'img' ? { ...b, src: '' } : b));
+export const cacheKey = () => 'kobling-cache:' + (serverBase() || location.origin);
+export function readCache() {
+  try { return JSON.parse(localStorage.getItem(cacheKey()) || 'null') } catch { return null }
+}
 const download = (name, blob) => {
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob); a.download = name;
@@ -103,7 +107,7 @@ export class ServerSession {
     if (this.user.role === 'admin') this.loadAdmin();
     this.loadMails();
   }
-  unmount() { this.ys?.destroy(); this.yh?.destroy(); clearTimeout(this.adminTimer); clearInterval(this.bkTimer); clearInterval(this.duckPoll) }
+  unmount() { this.worker?.terminate(); this.ys?.destroy(); this.yh?.destroy(); clearTimeout(this.adminTimer); clearInterval(this.bkTimer); clearInterval(this.duckPoll) }
 
   update(ps) {
     const s = this.app.state;
@@ -115,6 +119,13 @@ export class ServerSession {
       }
       if (ps.comments !== s.comments) applyCommentsToY(this.ys.doc, s.comments.filter(c => c.doc === s.cur).map(({ doc, ...c }) => c), 'app');
     }
+    // Endringer i andre dokumenter enn det åpne (f.eks. «Erstatt alle» i alle prosjekter) skrives til deres egne rom
+    if (!this.remote && !this.refreshing && ps.docs !== s.docs && ps.cur === s.cur)
+      s.docs.forEach(d => {
+        if (d.id === s.cur) return;
+        const was = ps.docs.find(x => x.id === d.id);
+        if (was && was !== d && JSON.stringify(was.blocks) !== JSON.stringify(d.blocks)) this.pushOther(d);
+      });
     if (!this.remoteHist && this.yh && this.yh.synced && ps.history !== s.history) {
       const have = new Set(historyFromY(this.yh.doc).map(h => h.id));
       s.history.filter(h => !have.has(h.id)).reverse().forEach(h => pushHistory(this.yh.doc, { ...h, snap: h.snap ? lean(h.snap) : null }, 'app'));
@@ -122,6 +133,9 @@ export class ServerSession {
     // Admin slår historikk for andre av/på: lagres på serveren
     if (this.user.role === 'admin' && ps.settings.histOthers !== s.settings.histOthers)
       api('PUT', '/api/admin/settings', { access: { histOthers: s.settings.histOthers !== false } }).catch(e => this.app.toast(e.message));
+    // «Frakoblet modus» i profilmenyen kobler faktisk fra serveren
+    if (ps.net && s.net && ps.net.sim !== s.net.sim) { this.ys?.setPaused(s.net.sim); this.yh?.setPaused(s.net.sim) }
+    if (ps.docs !== s.docs || ps.cur !== s.cur) this.saveCache();
     if (ps.active !== s.active) {
       this.ys?.awareness.setLocalStateField('bid', s.active || null);
       this.syncView(s.active);
@@ -153,6 +167,9 @@ export class ServerSession {
       if (isEmptyY(ys.doc) && local) applyDocToY(ys.doc, local, 'app');
       else this.pull();
     };
+    // Lokal kopi (y-indexeddb) er klar før serveren svarer, og uten nett
+    ys.onLocal = () => { if (!ys.synced && !isEmptyY(ys.doc)) this.pull() };
+    if (this.app.netOff()) ys.setPaused(!!this.app.state.net.sim);
     ys.awareness.on('change', () => {
       const list = [];
       ys.awareness.getStates().forEach((st, id) => {
@@ -172,6 +189,9 @@ export class ServerSession {
         if (!this.version) this.version = h.version;
         else if (h.version && h.version !== this.version && !this.updTimer) { this.app.toast('Kobling er oppdatert til ' + h.version + '. Laster på nytt …'); setTimeout(() => location.reload(), 1800) }
       }).catch(() => {});
+      // Nettstatus i topplinjen følger forbindelsen til serveren
+      if (st === 'online' && this.app.state.net && !this.app.state.net.on) this.app.setNet({ on: true });
+      if (st === 'offline' && this.app.state.net && this.app.state.net.on) this.app.setNet({ on: false });
       if (st === 'closed' && (code === 4401 || code === 4000)) location.reload();
       if (st === 'closed' && code === 4403) this.app.toast('Du har ikke tilgang til dette dokumentet');
     };
@@ -182,7 +202,7 @@ export class ServerSession {
     this.yh?.destroy();
     this.yh = null;
     if (this.user.role !== 'admin' && this.access.histOthers === false) return this.app.setState({ history: [] });
-    const yh = new YSocket(docId + '~hist');
+    const yh = new YSocket(docId + '~hist', { persist: false });
     this.yh = yh;
     const pullHist = () => {
       this.remoteHist = true;
@@ -191,6 +211,72 @@ export class ServerSession {
     yh.doc.on('update', (_u, origin) => { if (origin === yh) pullHist() });
     yh.onSynced = pullHist;
     yh.onStatus = (st, code) => { if (st === 'closed' && code === 4403) { this.access.histOthers = false; this.app.setState({ history: [] }) } };
+  }
+
+  // ---------- stavekontroll (Hunspell i Web Worker) ----------
+  // Starter når Sjekk-fanen åpnes første gang. Ord med stor forbokstav (navn) og forkortelser hoppes over.
+  spellFix(w, lang) {
+    if (!this.spellOn) {
+      if (this.app.state.right !== 'check') return undefined;
+      this.spellOn = true;
+    }
+    if (w.length < 3 || w[0] !== w[0].toLowerCase()) return undefined;
+    const k = lang + ':' + w;
+    this.spellRes = this.spellRes || new Map();
+    if (this.spellRes.has(k)) return this.spellRes.get(k) || undefined;
+    this.spellQ = this.spellQ || new Set();
+    this.spellQ.add(k);
+    clearTimeout(this.spellT);
+    this.spellT = setTimeout(() => this.spellFlush(), 250);
+    return undefined;
+  }
+
+  spellFlush() {
+    if (!this.spellQ || !this.spellQ.size) return;
+    if (!this.worker) {
+      this.worker = new Worker(new URL('./spell.worker.ts', import.meta.url), { type: 'module' });
+      this.worker.onmessage = e => {
+        const { lang, out, error, words } = e.data;
+        if (error) {
+          if (!this.spellErr) this.app.toast('Stavekontrollen kunne ikke lastes: ' + error);
+          this.spellErr = true;
+        }
+        (this.spellSent.get(e.data.id) || []).forEach(w => this.spellRes.set(lang + ':' + w, error ? null : out[w] || null));
+        this.spellSent.delete(e.data.id);
+        this.app.setState({ spellTick: Date.now() });
+      };
+      this.spellSent = new Map();
+      this.spellId = 0;
+    }
+    const byLang = {};
+    this.spellQ.forEach(k => { const i = k.indexOf(':'); (byLang[k.slice(0, i)] = byLang[k.slice(0, i)] || []).push(k.slice(i + 1)) });
+    this.spellQ.clear();
+    Object.entries(byLang).forEach(([lang, words]) => {
+      const id = ++this.spellId;
+      this.spellSent.set(id, words);
+      words.forEach(w => this.spellRes.set(lang + ':' + w, null)); // ikke spør på nytt mens svaret er på vei
+      this.worker.postMessage({ id, lang, base: serverBase() || location.origin, words });
+    });
+  }
+
+  // Til oppstart uten nett: bruker, tilgang og dokumentliste (uten bildedata) lagres lokalt
+  saveCache() {
+    clearTimeout(this.cacheT);
+    this.cacheT = setTimeout(() => {
+      try {
+        const docs = this.app.state.docs.map(d => ({ ...d, files: (d.files || []).map(f => ({ ...f, src: '' })), blocks: lean(d.blocks || []) }));
+        localStorage.setItem(cacheKey(), JSON.stringify({ user: this.user, access: this.access, docs }));
+      } catch { /* full lagring: hoppes over */ }
+    }, 1500);
+  }
+
+  pushOther(d) {
+    const ys = new YSocket(d.id);
+    let done = false;
+    const end = () => { if (!done) { done = true; setTimeout(() => ys.destroy(), 600) } };
+    ys.onSynced = () => { applyDocToY(ys.doc, d, 'app'); end() };
+    ys.onDenied = () => { this.app.toast('Du har bare lesetilgang til «' + d.title + '»'); end() };
+    setTimeout(end, 15000);
   }
 
   pull() {
@@ -221,6 +307,8 @@ export class ServerSession {
     const lint = lintTex(tex, app.fileSet(doc)).map(withCode);
     const count = log => ({ nE: log.filter(d => d.sev === 'error').length, nW: log.filter(d => d.sev !== 'error').length });
     if (lint.some(d => d.sev === 'error')) return app.setState({ compile: { status: 'error', time: '', log: lint, ...count(lint) } });
+    // Uten nett: feilsjekken og forhåndsvisningen i appen; PDF-en lages når serveren er tilbake
+    if (app.netOff()) return app.setState({ compile: { status: 'ok', time: '', log: lint, ...count(lint) }, pdfSnap: clone(doc) });
     const files = {};
     const add = (name, url) => { if (url && url.startsWith('data:')) files['bilder/' + name] = url.split(',')[1] };
     (doc.files || []).forEach(f => add(f.file, f.src));
@@ -316,7 +404,8 @@ export class ServerSession {
     try {
       const list = (await api('GET', '/api/docs')).map(toDoc);
       const cur = this.app.state.cur;
-      this.app.setState(s => ({ docs: list.map(d => (d.id === cur ? s.docs.find(x => x.id === cur) || d : d)) }));
+      this.refreshing = true;
+      this.app.setState(s => ({ docs: list.map(d => (d.id === cur ? s.docs.find(x => x.id === cur) || d : d)) }), () => { this.refreshing = false });
     } catch { /* */ }
   }
 

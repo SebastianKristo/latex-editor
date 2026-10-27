@@ -18,6 +18,8 @@
     "@fastify/websocket": "^10.0.1",
     "@kobling/core": "workspace:*",
     "acme-client": "^5.4.0",
+    "dictionary-en": "^4.0.0",
+    "dictionary-nb": "^3.0.0",
     "fastify": "^4.28.1",
     "lib0": "^0.2.119",
     "node-cron": "^3.0.3",

@@ -37,7 +37,6 @@ import {
   SPELL_EN,
   parseCSV,
   parseGrid,
-  plotSvg,
   plotLines,
   citeNums,
   bibTxt,
@@ -565,3 +564,193 @@ function drawCircuit(d, o) {
 }
 
 export { symEls, drawCircuit };
+
+// Graf fra CSV som SVG (forhåndsvisning av plot-blokken)
+export function plotSvg(b, o) {
+  o = o || {};
+  const d = parseCSV(b.csv),
+    E = React.createElement,
+    W = o.w || 460,
+    PH = o.h || 240,
+    logx = b.kind === 'bode';
+  const rows = d.rows.filter(r => !logx || r[0] > 0);
+  if (rows.length < 2) return null;
+  const panels = logx && d.head.length >= 3 ? [[1], [2]] : [d.head.slice(1).map((_, i) => i + 1)],
+    L = 54,
+    R = 14,
+    T = 12,
+    B = 40,
+    H = panels.length * PH;
+  const fx = logx ? Math.log10 : x => x,
+    xv = rows.map(r => fx(r[0])),
+    x0 = Math.min(...xv),
+    x1 = Math.max(...xv),
+    X = v => L + ((fx(v) - x0) / (x1 - x0 || 1)) * (W - L - R);
+  const nice = (a, c, n) => {
+    const span = c - a || 1,
+      s0 = Math.pow(10, Math.floor(Math.log10(span / n))),
+      m = [1, 2, 2.5, 5, 10].map(k => k * s0).find(k => span / k <= n) || s0 * 10,
+      out = [];
+    for (let i = Math.ceil(a / m); i * m <= c + m * 1e-6; i++) out.push(+(i * m).toPrecision(10));
+    return out;
+  };
+  const fmt = v => {
+    const a = Math.abs(v);
+    return (
+      a >= 1e6
+        ? +(v / 1e6).toPrecision(4) + 'M'
+        : a >= 1e3
+          ? +(v / 1e3).toPrecision(4) + 'k'
+          : String(+v.toPrecision(4))
+    ).replace('.', ',');
+  };
+  const xt = logx
+    ? (() => {
+        const q = [];
+        for (let k = Math.ceil(x0 - 1e-9); k <= Math.floor(x1 + 1e-9); k++) q.push(Math.pow(10, k));
+        return q;
+      })()
+    : nice(x0, x1, 6);
+  const lab = s =>
+    (s || '')
+      .replace(/\\qty\{([^}]*)\}\{[^}]*\}/g, '$1')
+      .replace(/[$\\{}]/g, '')
+      .replace(/_/g, '');
+  const COL = ['#1f5fbf', '#c0392b', '#2e8b57', '#8e44ad', '#d35400'],
+    K = [],
+    ink = '#222',
+    grid = '#e3e1dc';
+  panels.forEach((cols, pi) => {
+    const top = pi * PH + T,
+      bot = pi * PH + PH - B,
+      ys = [];
+    cols.forEach(c =>
+      rows.forEach(r => {
+        if (isFinite(r[c])) ys.push(r[c]);
+      })
+    );
+    if (!ys.length) return;
+    let y0 = Math.min(...ys),
+      y1 = Math.max(...ys);
+    if (y0 === y1) {
+      y0 -= 1;
+      y1 += 1;
+    }
+    const yt = nice(y0, y1, 5);
+    y0 = Math.min(y0, yt[0]);
+    y1 = Math.max(y1, yt[yt.length - 1]);
+    const Y = v => bot - ((v - y0) / (y1 - y0 || 1)) * (bot - top);
+    if (logx)
+      for (let k = Math.floor(x0); k < x1; k++)
+        for (let mm = 2; mm < 10; mm++) {
+          const v = mm * Math.pow(10, k),
+            f = fx(v);
+          if (f > x0 && f < x1)
+            K.push(
+              E('line', {
+                key: 'gm' + pi + '_' + v,
+                x1: X(v),
+                x2: X(v),
+                y1: top,
+                y2: bot,
+                stroke: grid,
+                strokeWidth: 0.5
+              })
+            );
+        }
+    yt.forEach(v => {
+      K.push(
+        E('line', { key: 'gy' + pi + '_' + v, x1: L, x2: W - R, y1: Y(v), y2: Y(v), stroke: grid, strokeWidth: 1 })
+      );
+      K.push(
+        E(
+          'text',
+          { key: 'ty' + pi + '_' + v, x: L - 6, y: Y(v) + 4, textAnchor: 'end', fontSize: 11, fill: ink },
+          fmt(v)
+        )
+      );
+    });
+    xt.forEach(v => {
+      K.push(
+        E('line', { key: 'gx' + pi + '_' + v, x1: X(v), x2: X(v), y1: top, y2: bot, stroke: grid, strokeWidth: 1 })
+      );
+      if (pi === panels.length - 1)
+        K.push(
+          E('text', { key: 'tx' + v, x: X(v), y: bot + 15, textAnchor: 'middle', fontSize: 11, fill: ink }, fmt(v))
+        );
+    });
+    K.push(
+      E('rect', {
+        key: 'ax' + pi,
+        x: L,
+        y: top,
+        width: W - L - R,
+        height: bot - top,
+        fill: 'none',
+        stroke: ink,
+        strokeWidth: 1
+      })
+    );
+    cols.forEach((c, ci) =>
+      K.push(
+        E('polyline', {
+          key: 's' + pi + '_' + c,
+          points: rows
+            .filter(r => isFinite(r[c]))
+            .map(r => X(r[0]).toFixed(1) + ',' + Y(r[c]).toFixed(1))
+            .join(' '),
+          fill: 'none',
+          stroke: COL[(pi + ci) % COL.length],
+          strokeWidth: 2,
+          strokeLinejoin: 'round'
+        })
+      )
+    );
+    K.push(
+      E(
+        'text',
+        {
+          key: 'yl' + pi,
+          transform: 'translate(13 ' + (top + bot) / 2 + ') rotate(-90)',
+          textAnchor: 'middle',
+          fontSize: 12,
+          fill: ink
+        },
+        lab(pi === 0 ? b.ylabel || d.head[1] : d.head[2])
+      )
+    );
+    if (cols.length > 1)
+      cols.forEach((c, ci) => {
+        K.push(
+          E('line', {
+            key: 'lg' + c,
+            x1: W - R - 120,
+            x2: W - R - 102,
+            y1: top + 14 + ci * 15,
+            y2: top + 14 + ci * 15,
+            stroke: COL[ci % COL.length],
+            strokeWidth: 2
+          })
+        );
+        K.push(
+          E('text', { key: 'lt' + c, x: W - R - 96, y: top + 18 + ci * 15, fontSize: 11, fill: ink }, lab(d.head[c]))
+        );
+      });
+  });
+  K.push(
+    E(
+      'text',
+      { key: 'xl', x: (L + W - R) / 2, y: H - 8, textAnchor: 'middle', fontSize: 12, fill: ink },
+      lab(b.xlabel || d.head[0])
+    )
+  );
+  return E(
+    'svg',
+    {
+      viewBox: '0 0 ' + W + ' ' + H,
+      width: '100%',
+      style: { maxWidth: o.max || W, display: 'block', fontFamily: "'STIX Two Text',serif", background: '#fff' }
+    },
+    K
+  );
+}

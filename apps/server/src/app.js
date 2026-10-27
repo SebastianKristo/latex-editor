@@ -4,8 +4,9 @@ import fastifyWs from '@fastify/websocket';
 import fastifyCors from '@fastify/cors';
 import cron from 'node-cron';
 import { randomBytes, randomUUID } from 'node:crypto';
-import { existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, createReadStream } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { join, dirname } from 'node:path';
 import { openDb, getSetting, setSetting } from './db.js';
 import { checkPass, hashPass, createUser, ensureAdmin, newSession, userFromToken, tokenOf, docRole, RANK } from './auth.js';
 import { compileTex, compileCache, synctexEdit, synctexView } from './compile.js';
@@ -402,6 +403,15 @@ export async function buildApp(cfg, { compile = compileTex, figures = renderFigu
 
   // ---- web-klienten ----
   app.get('/api/health', async () => ({ ok: true, version: currentVersion().ver }));
+  // Hunspell-ordbøker til stavekontrollen i nettleseren (Sjekk-fanen). Lastes som data, ikke kode.
+  const DICT = { nb: 'dictionary-nb', en: 'dictionary-en' };
+  app.get('/dict/:file', async (request, reply) => {
+    const m = /^(nb|en)\.(aff|dic)$/.exec(request.params.file);
+    if (!m) return reply.code(404).send({ error: 'Finnes ikke.' });
+    let dir;
+    try { dir = dirname(fileURLToPath(import.meta.resolve(DICT[m[1]]))) } catch { return reply.code(404).send({ error: 'Ordboken er ikke installert.' }) }
+    return reply.type('text/plain; charset=utf-8').header('cache-control', 'public, max-age=604800').send(createReadStream(join(dir, 'index.' + m[2])));
+  });
   if (cfg.webDir && existsSync(cfg.webDir)) {
     await app.register(fastifyStatic, { root: cfg.webDir });
     app.setNotFoundHandler((req, reply) => req.url.startsWith('/api/') ? reply.code(404).send({ error: 'Finnes ikke.' }) : reply.sendFile('index.html'));

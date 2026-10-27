@@ -33,6 +33,8 @@ export async function compileTex({ tex, files = {}, engine = 'pdfLaTeX', timeout
 // Norsk forklaring til vanlige TeX-meldinger (vises under den engelske meldingen i loggen).
 const EXPLAIN = [
   [/Option clash for package/, 'Pakken lastes flere ganger med ulike valg. Slå valgene sammen i én \\usepackage-linje.'],
+  [/I do not know the key '\/tikz\/matrix of (math )?nodes'/, 'TikZ-biblioteket «matrix» er ikke lastet. Legg til \\usetikzlibrary{matrix} i preamblen.'],
+  [/I do not know the key '\/tikz\//, 'Ukjent TikZ-valg. Sjekk stavemåten, eller om det mangler et \\usetikzlibrary{…} i preamblen.'],
   [/Undefined control sequence/, 'Ukjent kommando. Sjekk stavemåten, eller om pakken som definerer den er lastet.'],
   [/Missing \$ inserted/, 'Matte-tegn (_ ^ \\alpha …) brukt utenfor matte-modus. Sett uttrykket i $ … $.'],
   [/File `([^']+)' not found/, 'Filen mangler. Last opp bildet med akkurat dette navnet, eller rett filnavnet.'],

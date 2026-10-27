@@ -71,6 +71,7 @@ import {
   cellBack,
   wsn,
   parseDoc,
+  mergePre,
   escH,
   texLabels,
   texMacros,
@@ -2082,7 +2083,7 @@ export default class Component extends DCLogic {
         at = i < 0 ? d.blocks.length : i + 1;
       return {
         ...d,
-        pre: [...(d.pre || []), ...(r.pre || []).filter(l => !(d.pre || []).includes(l))],
+        pre: mergePre(d.pre, r.pre),
         blocks: [...d.blocks.slice(0, at), ...r.blocks, ...d.blocks.slice(at)]
       };
     }, 'Limte inn LaTeX');

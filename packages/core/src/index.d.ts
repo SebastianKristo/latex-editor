@@ -55,3 +55,4 @@ export function sha256(s: string): string;
 export function figPreamble(tex: string): string;
 export function figKey(pre: string, code: string): string;
 export function extractFigures(tex: string): { code: string; line: number; hash: string }[];
+export function mergePre(a: string[], b: string[]): string[];

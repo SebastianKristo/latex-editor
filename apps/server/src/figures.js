@@ -69,7 +69,11 @@ async function renderOne({ pre, f, files, engine, timeoutMs }) {
       await mkdir(dirname(join(dir, rel)), { recursive: true });
       await writeFile(join(dir, rel), Buffer.from(b64, 'base64'));
     }
-    const head = `\\documentclass[${dvisvgmOpt ? 'dvisvgm,' : ''}tikz,border=2pt]{standalone}\n${pre}\n\\begin{document}\n`;
+    // Sideoppsett (geometry) gir «Dimension too large» i standalone, og en figur trenger det ikke
+    const figPre = pre
+      .replace(/\\usepackage\s*(\[[^\]]*\])?\s*\{geometry\}/g, '')
+      .replace(/\\(newgeometry|geometry)\s*\{[^}]*\}/g, '');
+    const head = `\\documentclass[${dvisvgmOpt ? 'dvisvgm,' : ''}tikz,border=2pt]{standalone}\n${figPre}\n\\begin{document}\n`;
     const first = head.split('\n').length; // linjen figurkoden starter på i fig.tex
     await writeFile(join(dir, 'fig.tex'), head + f.code + '\n\\end{document}\n');
     const args = ['-interaction=nonstopmode', '-halt-on-error', '-no-shell-escape', ...(cmd === 'xelatex' ? ['-no-pdf'] : []), 'fig.tex'];

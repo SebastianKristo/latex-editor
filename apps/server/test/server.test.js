@@ -242,6 +242,9 @@ test('kompileringsloggen: ukjent kommando navngis, brutte linjer settes sammen, 
   assert.equal(e[1].message, "Package pdftex.def Error: File `Screenshot 2026-10-26 at 16.27.32.png' not found: using draft setting.");
   assert.match(e[1].hint, /Filen mangler/);
   assert.deepEqual(texWarnings(log), []);
+  const tk = texErrors("! Package pgfkeys Error: I do not know the key '/tikz/matrix of nodes' and I am going \nto ignore it. Perhaps you misspelled it.\n\nl.94 nodes in empty cells] {");
+  assert.equal(tk[0].line, 94);
+  assert.match(tk[0].hint, /usetikzlibrary\{matrix\}/);
 });
 
 test('backup-dump kan gjenopprettes', () => {

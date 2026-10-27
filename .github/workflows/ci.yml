@@ -25,6 +25,8 @@ jobs:
       - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends texlive-latex-extra texlive-pictures texlive-science texlive-lang-european latexmk dvisvgm smbclient samba zstd
       - run: pnpm install --frozen-lockfile
       - run: node tools/compile-examples.mjs
+      - name: TikZ-figurer med latex + dvisvgm (handoff §9)
+        run: dvisvgm --version && cd apps/server && node --test test/figures.test.js
       - name: SMB-backup mot ekte Samba
         run: |
           sudo mkdir -p /srv/nas/backup && sudo chmod 777 /srv/nas/backup

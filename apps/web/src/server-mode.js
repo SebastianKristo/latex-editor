@@ -2,9 +2,9 @@
 // kompilering til ekte PDF (pdf.js) og SyncTeX. Prototypens lokale demo-logikk byttes ut her,
 // mens visningsmodellen (renderVals) og malen er de samme.
 import React from 'react';
-import { docCode, lintTex, clone, now, slug, smtpFrom, skeleton, EMAIL_RE, DEF_DUCK, DEF_SMB, DEF_SMTP, DEF_DEP, DEF_SET } from '@kobling/core';
+import { docCode, lintTex, figPreamble, extractFigures, clone, now, slug, smtpFrom, skeleton, EMAIL_RE, DEF_DUCK, DEF_SMB, DEF_SMTP, DEF_DEP, DEF_SET, DEF_UPD } from '@kobling/core';
 import { applyDocToY, docFromY, commentsFromY, applyCommentsToY, historyFromY, pushHistory, isEmptyY } from '@kobling/core/ydoc';
-import { api, b64, setToken, serverBase } from './api';
+import { api, b64, setToken, serverBase, authQuery } from './api';
 import { YSocket } from './ysocket';
 import { PdfView } from './PdfView';
 
@@ -33,11 +33,12 @@ export class ServerSession {
     this.access = { histOthers: true, ...(access || {}) };
     this.docs = docs.map(toDoc);
     this.lsKey = 'kobling-user-' + user.id;
-    this.persistKeys = ['settings', 'rightW', 'recent'];
+    this.persistKeys = ['settings', 'rightW', 'recent', 'sideHidden'];
     this.ys = null;
     this.remote = false;
     this.pdf = null;
     this.seq = 0;
+    this.figs = {}; // figurnøkkel → 'ok' | 'error' (README §9)
     this.adminLoaded = false;
     this.adminRemote = false;
   }
@@ -61,9 +62,11 @@ export class ServerSession {
       // histOthers er en serverinnstilling (admin), ikke en personlig en
       settings: { ...DEF_SET, ...app.state.settings, ...(saved.settings || {}), server: serverBase() || location.origin, histOthers: this.access.histOthers },
       rightW: saved.rightW || app.state.rightW,
+      sideHidden: !!saved.sideHidden,
       comments: [], history: [], people: [], mails: [], backups: [], presence: {}, remotePresence: [],
       me: me.id, view: app.state.view === 'settings' || app.state.view === 'projects' ? app.state.view : 'editor',
       duck: { ...DEF_DUCK }, smb: { ...DEF_SMB }, smtp: { ...DEF_SMTP }, deploy: { ...DEF_DEP },
+      upd: { ...DEF_UPD, lastCheck: '' }, updUi: { checking: false, found: null, run: null }, restore: null, fetchingBk: false,
       duckUi: { log: [], ip: '', last: '', busy: false, showToken: false },
       linkRole: 'Ingen tilgang', smtpReady: false, pdfBoxes: []
     });
@@ -78,6 +81,16 @@ export class ServerSession {
     app.sendDocMail = () => this.sendDocMail();
     app.deleteDoc = id => this.deleteDoc(id);
     app.duplicateDoc = () => this.duplicateDoc();
+    app.fetchBackups = () => this.loadBackups(true);
+    app.openRestore = k => this.openRestore(k);
+    app.doRestore = () => this.doRestore();
+    app.onBackupFile = e => this.onBackupFile(e);
+    app.smbConnect = () => this.smbConnect();
+    app.publicBase = () => this.linkBase();
+    app.checkUpdate = () => this.checkUpdate();
+    app.runUpdate = (target, rollback) => this.runUpdate(rollback);
+    app.smbNode = cwd => this.smbNode(cwd);
+    app.smbMkdir = () => this.smbMkdir();
     app.smtpOk = () => !!app.state.smtpReady;
     app.tickPresence = () => {};
     return this;
@@ -120,7 +133,7 @@ export class ServerSession {
     const onDuck = s.view === 'settings' && s.setTab === 'duck' && this.user.role === 'admin';
     if (onDuck && !this.duckPoll) this.duckPoll = setInterval(() => this.refreshDuckLog(), 4000);
     if (!onDuck && this.duckPoll) { clearInterval(this.duckPoll); this.duckPoll = null }
-    if (this.adminLoaded && !this.adminRemote && ['duck', 'smb', 'smtp', 'deploy'].some(k => ps[k] !== s[k])) {
+    if (this.adminLoaded && !this.adminRemote && ['duck', 'smb', 'smtp', 'deploy', 'upd'].some(k => ps[k] !== s[k])) {
       clearTimeout(this.adminTimer);
       this.adminTimer = setTimeout(() => this.saveAdmin(), 600);
     }
@@ -152,7 +165,13 @@ export class ServerSession {
       clearTimeout(this.denyTimer);
       this.denyTimer = setTimeout(() => { if (this.ys === ys) this.bind(docId) }, 400);
     };
+    ys.onNotice = text => this.app.toast(text);
     ys.onStatus = (st, code) => {
+      // Etter en oppdatering av serveren lastes appen på nytt, så klienten passer til serveren
+      if (st === 'online') api('GET', '/api/health').then(h => {
+        if (!this.version) this.version = h.version;
+        else if (h.version && h.version !== this.version && !this.updTimer) { this.app.toast('Kobling er oppdatert til ' + h.version + '. Laster på nytt …'); setTimeout(() => location.reload(), 1800) }
+      }).catch(() => {});
       if (st === 'closed' && (code === 4401 || code === 4000)) location.reload();
       if (st === 'closed' && code === 4403) this.app.toast('Du har ikke tilgang til dette dokumentet');
     };
@@ -210,23 +229,50 @@ export class ServerSession {
     app.setState(s => ({ compile: { ...s.compile, status: 'running' } }));
     const fromServer = (list, sev) => (list || []).map(d => withCode({ line: d.line || 0, sev, msg: d.message, hint: d.hint || '' }));
     try {
-      const res = await api('POST', '/api/compile', { tex, files, engine: S.engine }, { raw: true });
+      // Bare figurer i LaTeX-blokker trenger bilde fra serveren (kretseditoren tegner sine egne)
+      const block = id => doc.blocks.find(b => b.id === id);
+      const figs = tex === genText ? extractFigures(tex).filter(f => { const b = block(lines[f.line - 1] && lines[f.line - 1].bid); return !b || b.type === 'raw' }).map(f => f.hash) : undefined;
+      const res = await api('POST', '/api/compile', { tex, files, engine: S.engine, doc: doc.id, figs }, { raw: true });
       const data = new Uint8Array(await res.arrayBuffer());
       if (seq !== this.seq) return;
       const id = res.headers.get('x-compile-id');
       this.pdf = { data, id, lines };
       const ms = Number(res.headers.get('x-compile-ms') || 0);
       let warn = [];
-      try { if (id) warn = fromServer((await api('GET', '/api/compile/' + id + '/log')).warnings, 'warning') } catch { /* */ }
+      try {
+        if (id) {
+          const r = await api('GET', '/api/compile/' + id + '/log');
+          // PDF-en er laget; en figur som ikke kunne tegnes til forhåndsvisningen er en advarsel
+          warn = [...fromServer(r.warnings, 'warning'), ...this.takeFigs(r, 'warning')];
+        }
+      } catch { /* */ }
       const log = [...lint, ...warn.filter(w => !lint.some(l => l.line === w.line && l.msg === w.msg))];
       app.setState({ compile: { status: 'ok', time: (ms / 1000).toFixed(1).replace('.', ','), log, ...count(log) }, pdfSnap: clone(doc) }, () => this.syncView(app.state.active));
     } catch (e) {
       if (seq !== this.seq) return;
+      const errs = e.data && e.data.errors ? fromServer(e.data.errors, 'error') : [];
+      const figErr = e.data ? this.takeFigs(e.data, 'error').filter(f => !errs.some(x => x.line === f.line)) : [];
       const log = e.data && e.data.errors
-        ? [...fromServer(e.data.errors, 'error'), ...lint, ...fromServer(e.data.warnings, 'warning')]
+        ? [...errs, ...figErr, ...lint, ...fromServer(e.data.warnings, 'warning')]
         : [{ line: 0, sev: 'error', msg: e.message, hint: 'Serveren kunne ikke kompilere dokumentet.', code: '' }];
       app.setState({ compile: { status: 'error', time: '', log, ...count(log) } });
     }
+  }
+
+  // Figurstatus fra serveren; feil i figurene legges i loggen med linjenummer i main.tex.
+  takeFigs(r, sev) {
+    Object.assign(this.figs, r.figs || {});
+    const src = this.app.codeTextNow().split('\n');
+    return (r.figErrors || []).map(d => ({ line: d.line || 0, sev, msg: 'Figur: ' + d.message, hint: d.hint || 'Figuren kunne ikke tegnes i forhåndsvisningen.', code: (src[(d.line || 1) - 1] || '').trim() }));
+  }
+
+  figCtx(doc, S) {
+    const pre = figPreamble(docCode(doc, S).map(l => l.s).join('\n'));
+    return {
+      pre,
+      url: h => serverBase() + '/api/docs/' + doc.id + '/fig/' + h + '.svg' + authQuery(),
+      state: h => (this.figs[h] === 'ok' ? 'ok' : this.app.state.compile && this.app.state.compile.status === 'running' ? 'busy' : this.figs[h])
+    };
   }
 
   bidAt(lines, line) {
@@ -306,7 +352,7 @@ export class ServerSession {
       const r = await api('GET', '/api/docs/' + id + '/people');
       const people = r.people.map(p => ({ id: p.id, name: p.id === this.user.id ? p.name + ' (deg)' : p.name, email: p.email, initials: initialsOf(p.name), color: colorFor(p.id), role: p.role }))
         .concat(r.invites.map(i => ({ id: 'inv:' + i.email, name: i.email, email: i.email, initials: initialsOf(i.email), color: colorFor(i.email), role: i.role, status: 'Invitert', pending: true })));
-      if (this.app.state.cur === id) this.app.setState({ people, linkRole: LINK_ROLE[r.linkRole] || 'Ingen tilgang', smtpReady: r.smtpReady });
+      if (this.app.state.cur === id) this.app.setState({ people, linkRole: LINK_ROLE[r.linkRole] || 'Ingen tilgang', smtpReady: r.smtpReady, linkBase: r.link || null });
     } catch { /* */ }
   }
 
@@ -378,10 +424,12 @@ export class ServerSession {
       const r = await api('GET', '/api/admin/settings');
       this.adminRemote = true;
       this.app.setState(s => ({
-        duck: { ...DEF_DUCK, ...pick(r.duck, DEF_DUCK) },
+        duck: { ...DEF_DUCK, ...pick(r.duck, { ...DEF_DUCK, links: true }) },
         smb: { ...DEF_SMB, ...pick(r.smb, DEF_SMB) },
         smtp: { ...DEF_SMTP, ...pick(r.smtp, { ...DEF_SMTP, fromName: '' }) },
         deploy: { ...DEF_DEP, ...pick(r.deploy, DEF_DEP) },
+        upd: { ...DEF_UPD, ...pick(r.update, DEF_UPD), ...(r.version ? { ver: r.version.ver, built: r.version.built } : {}) },
+        updateMode: r.updateMode,
         serverUsers: r.users ? { n: r.users.n, admins: r.users.admins || 0 } : null,
         duckUi: { ...s.duckUi, log: (r.duckLog || []).map(logRow), ip: (r.duckLog || []).find(l => l.ip)?.ip || s.duckUi.ip }
       }), () => { this.adminRemote = false; this.adminLoaded = true });
@@ -390,11 +438,12 @@ export class ServerSession {
 
   async saveAdmin() {
     const s = this.app.state;
-    const body = { duck: s.duck, smb: s.smb, smtp: { ...s.smtp, from: smtpFrom(s.smtp) }, deploy: s.deploy };
+    const { channel, auto, time, backup, notify } = s.upd;
+    const body = { duck: s.duck, smb: s.smb, smtp: { ...s.smtp, from: smtpFrom(s.smtp) }, deploy: s.deploy, update: { channel, auto, time, backup, notify } };
     // Ugyldige DuckDNS-verdier vises som feil i skjemaet; de lagres ikke før de er rettet.
     if (body.duck.domain && !/^[a-z0-9-]{1,63}$/.test(body.duck.domain)) delete body.duck;
     else if (body.duck.token && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(body.duck.token)) delete body.duck;
-    try { await api('PUT', '/api/admin/settings', body) } catch (e) { if (e.status !== 400) this.app.toast(e.message) }
+    try { await api('PUT', '/api/admin/settings', body); if (body.duck) this.loadPeople() } catch (e) { if (e.status !== 400) this.app.toast(e.message) }
   }
 
   async refreshDuckLog() {
@@ -447,26 +496,189 @@ export class ServerSession {
     }, 400);
   }
 
-  async loadBackups() {
+  async loadBackups(manual) {
+    const app = this.app, b = app.state.smb;
+    if (manual && (!b.host || !b.share)) return app.toast('Fyll inn server og share først');
+    if (manual) { clearTimeout(this.adminTimer); await this.saveAdmin(); app.setState({ fetchingBk: true }) }
     try {
       const list = await api('GET', '/api/admin/backups');
-      this.app.setState({ backups: list.map(b => ({ id: b.name, name: b.name, date: b.date, time: '', size: fmtSize(b.size), bytes: b.size })) });
-    } catch { /* ikke satt opp */ }
+      app.setState(s => ({
+        fetchingBk: false,
+        backups: [...s.backups.filter(k => k.fromFile), ...list.map(x => {
+          const d = new Date(x.date), ok = !isNaN(d);
+          return { id: x.name, name: x.name, date: ok ? d.toLocaleDateString('nb-NO') : x.date, time: ok ? d.toTimeString().slice(0, 5) : '', size: fmtSize(x.size), bytes: x.size, remote: true };
+        })]
+      }));
+      if (manual) app.toast('Fant ' + list.length + ' backuper på //' + b.host + '/' + b.share);
+    } catch (e) { app.setState({ fetchingBk: false }); if (manual) app.toast(e.message) }
   }
 
-  async restoreBackup(k) {
-    if (!window.confirm('Gjenopprette «' + k.name + '»? Dokumentene erstattes med innholdet i backupen.')) return;
+  // Gjenopprett-dialogen: dokumentlisten hentes fra backupen på serveren.
+  async openRestore(k) {
+    const app = this.app;
     try {
-      const r = await api('POST', '/api/admin/backups/' + encodeURIComponent(k.name) + '/restore');
-      if (!r.ok) return this.app.toast(r.msg);
-      this.app.toast('Gjenopprettet fra ' + k.name);
-      setTimeout(() => location.reload(), 900);
-    } catch (e) { this.app.toast(e.message) }
+      const r = k.docs ? k : await api('GET', '/api/admin/backups/' + encodeURIComponent(k.id) + '/docs');
+      const docs = r.docs.map(d => ({ ...d, blocks: d.blocks && d.blocks.length !== undefined ? d.blocks : new Array(d.blocks || 0) }));
+      app.setState(s => ({
+        backups: s.backups.map(x => (x.id === k.id ? { ...x, docs, files: docs.length } : x)),
+        restore: { id: k.id, mode: 'merge', sel: Object.fromEntries(docs.map(d => [d.id, true])), safety: true }
+      }));
+    } catch (e) { app.toast(e.message) }
+  }
+
+  async doRestore() {
+    const app = this.app, r = app.state.restore, k = app.state.backups.find(x => x.id === r.id);
+    if (!k) return;
+    const ids = k.docs.filter(d => r.sel[d.id]).map(d => d.id);
+    if (!ids.length) return;
+    app.setState({ restore: null });
+    app.toast('Gjenoppretter …');
+    try {
+      const res = await api('POST', '/api/admin/backups/' + encodeURIComponent(k.id) + '/restore', { mode: r.mode, ids, safety: r.safety });
+      if (!res.ok) return app.toast(res.msg);
+      app.toast((r.mode === 'replace' ? 'Erstattet alt med ' : 'Gjenopprettet ' + res.restored + ' dokument' + (res.restored > 1 ? 'er' : '') + ' fra ') + k.name);
+      setTimeout(() => location.reload(), 1200);
+    } catch (e) { app.toast(e.message) }
+  }
+
+  async onBackupFile(e) {
+    const f = e.target.files && e.target.files[0];
+    e.target.value = '';
+    if (!f) return;
+    const app = this.app;
+    try {
+      const r = await api('POST', '/api/admin/backups/upload', { name: f.name, b64: await b64(f) });
+      const d = new Date();
+      const k = { id: r.id, name: r.name, date: d.toLocaleDateString('nb-NO'), time: now(), size: fmtSize(f.size), fromFile: true, files: r.docs.length, docs: r.docs };
+      app.setState(s => ({ backups: [k, ...s.backups] }), () => this.openRestore(k));
+    } catch (err) { app.toast(err.message) }
   }
 
   async downloadBackup(k) {
     try { const res = await api('GET', '/api/admin/backups/' + encodeURIComponent(k.name), undefined, { raw: true }); download(k.name, await res.blob()) }
     catch (e) { this.app.toast(e.message) }
+  }
+
+  // ---------- SMB-mappevelger: sharer og mapper hentes fra serveren etter hvert som man blar ----------
+  smbBody(extra) {
+    const b = this.app.state.smb;
+    return { host: b.host.trim(), user: b.user, pass: b.pass, domain: b.domain, ver: b.ver, ...extra };
+  }
+
+  async smbConnect() {
+    const app = this.app, b = app.state.smb, u = app.state.smbUi;
+    if (u.conn && u.conn.ok) return app.sbu({ conn: null, cwd: [], newDir: '' });
+    if (u.conn && u.conn.busy) return;
+    const host = b.host.trim();
+    app.sbu({ conn: { busy: true } });
+    try {
+      const r = await api('POST', '/api/admin/smb/browse', this.smbBody());
+      if (!r.ok) return app.sbu({ conn: { err: r.msg } });
+      const fs = Object.fromEntries(r.shares.sort((a, c) => a.localeCompare(c, 'nb')).map(n => [n, {}]));
+      this.smbLoaded = new Set();
+      this.smbHost = host;
+      // Lagret mappe åpnes direkte; mappene lastes når de vises
+      const cwd = b.share && fs[b.share] ? [b.share, ...(b.path || '').split('/').filter(Boolean)] : [];
+      let n = fs;
+      cwd.forEach(p => (n = n[p] = n[p] || {}));
+      app.setState(s => ({ smbFs: { ...(s.smbFs || {}), [host]: fs }, smbUi: { ...s.smbUi, conn: { ok: true, host }, cwd, newDir: '' } }));
+    } catch (e) { app.sbu({ conn: { err: e.message } }) }
+  }
+
+  smbNode(cwd) {
+    const s = this.app.state, u = s.smbUi, host = u.conn && u.conn.host;
+    let n = (s.smbFs || {})[host];
+    for (const p of cwd) n = n && n[p];
+    const key = cwd.join('/');
+    if (n && cwd.length && this.smbHost === host && !this.smbLoaded.has(key)) {
+      this.smbLoaded.add(key);
+      api('POST', '/api/admin/smb/browse', this.smbBody({ share: cwd[0], path: cwd.slice(1).join('/') }))
+        .then(r => {
+          if (!r.ok) return this.app.toast(r.msg);
+          this.app.setState(st => {
+            const fs = clone(st.smbFs[host]);
+            let m = fs;
+            for (const p of cwd) m = m[p] = m[p] || {};
+            const old = { ...m };
+            Object.keys(m).forEach(k => delete m[k]);
+            r.dirs.sort((a, c) => a.localeCompare(c, 'nb')).forEach(d => (m[d] = old[d] || {}));
+            return { smbFs: { ...st.smbFs, [host]: fs } };
+          });
+        })
+        .catch(e => this.app.toast(e.message));
+    }
+    return n;
+  }
+
+  async smbMkdir() {
+    const app = this.app, u = app.state.smbUi, name = (u.newDir || '').trim();
+    if (!name || !u.cwd.length) return;
+    if (/[\\/:*?"<>|;]/.test(name)) return app.toast('Ugyldige tegn i mappenavnet');
+    const cwd = u.cwd, host = u.conn.host;
+    try {
+      const r = await api('POST', '/api/admin/smb/mkdir', this.smbBody({ share: cwd[0], path: cwd.slice(1).join('/'), name }));
+      if (!r.ok) return app.toast(r.msg);
+      this.smbLoaded.add([...cwd, name].join('/'));
+      app.setState(s => {
+        const fs = clone(s.smbFs[host]);
+        let n = fs;
+        for (const p of cwd) n = n[p] = n[p] || {};
+        n[name] = n[name] || {};
+        return { smbFs: { ...s.smbFs, [host]: fs }, smbUi: { ...s.smbUi, newDir: '', cwd: [...cwd, name] } };
+      });
+      app.toast('Opprettet mappen ' + name);
+    } catch (e) { app.toast(e.message) }
+  }
+
+  // ---------- oppdatering av serveren ----------
+  async checkUpdate() {
+    const app = this.app;
+    app.uu({ checking: true, found: null });
+    clearTimeout(this.adminTimer);
+    await this.saveAdmin();
+    try {
+      const r = await api('POST', '/api/admin/update/check', { channel: app.state.upd.channel });
+      this.adminRemote = true;
+      app.setState(s => ({ upd: { ...s.upd, lastCheck: r.lastCheck } }), () => { this.adminRemote = false });
+      app.uu({ checking: false, found: r.found || 'none' });
+    } catch (e) { app.uu({ checking: false }); app.toast(e.message) }
+  }
+
+  async runUpdate(rollback) {
+    const app = this.app;
+    let r;
+    try { r = await api('POST', '/api/admin/update/run', rollback ? { rollback: true } : {}) } catch (e) { return app.toast(e.message) }
+    if (!r.ok) return app.toast(r.msg);
+    app.uu({ run: { pct: 4, step: 'Starter …', log: [], to: '' } });
+    const from = app.state.upd.ver;
+    let down = false, t0 = Date.now();
+    clearInterval(this.updTimer);
+    this.updTimer = setInterval(async () => {
+      try {
+        const st = await api('GET', '/api/admin/update/status', undefined, { timeout: 2500 });
+        const run = st.run || {};
+        if (run.done || (down && st.current && st.current.ver !== from)) {
+          clearInterval(this.updTimer);
+          const ok = run.done ? run.ok : true, to = run.to || (st.current && st.current.ver);
+          const log = [...(app.state.updUi.run?.log || []), ...(down ? ['✓ Migrerer database', '✓ Starter kobling-server ' + to] : []), '✓ Helsesjekk: /api/health'];
+          app.uu({ run: { pct: 100, done: true, ok, step: ok ? 'Ferdig' : 'Oppdateringen feilet', log: ok ? log : [...log.slice(0, -1), '✗ Se /var/lib/kobling/update/log.txt'], to, rollback: !!rollback }, found: null });
+          if (ok) {
+            app.toast((rollback ? 'Tilbake på ' : 'Serveren er oppdatert til ') + to + '. Laster appen på nytt …');
+            setTimeout(() => location.reload(), 2500);
+          } else app.toast('Oppdateringen feilet. Den forrige versjonen kjører fortsatt.');
+          return;
+        }
+        if (!down) app.uu({ run: { ...run, pct: run.pct || 4, log: run.log || [] } });
+      } catch {
+        // Serveren starter på nytt
+        if (!down) {
+          down = true;
+          const cur = app.state.updUi.run || { log: [] };
+          app.uu({ run: { ...cur, pct: 90, step: 'Starter kobling-server ' + (cur.to || '') + ' …', log: [...(cur.log || []), '✓ ' + String(cur.step || '').replace(' …', '')] } });
+        }
+        if (Date.now() - t0 > 20 * 60000) { clearInterval(this.updTimer); app.toast('Serveren svarer ikke etter oppdateringen') }
+      }
+    }, 1200);
   }
 
   async testSmtp() {
@@ -491,6 +703,11 @@ export class ServerSession {
     return [head('ØKT'), note('Dokumentene lagres på serveren og synkroniseres i sanntid med alle som har tilgang.'), btns([['Logg ut', () => this.logout()]])];
   }
 
+  // Lenkebasen kommer fra serveren (DuckDNS-adressen når den er på og brukes i lenker).
+  linkBase() {
+    return this.app.state.linkBase || { url: serverBase() || location.origin, ext: false };
+  }
+
   // ---------- visningsmodell ----------
   view(v) {
     const app = this.app, s = app.state;
@@ -501,8 +718,14 @@ export class ServerSession {
     v.people = v.people.map(p => ({ ...p, onRole: e => this.setRole(p, e.target.value) }));
     v.avatars = s.people.filter(p => !p.pending).slice(0, 4).map(p => ({ initials: p.initials, color: p.color, name: p.name }));
     if (!v.avatars.length) { const me = this.account(); v.avatars = [{ initials: me.initials, color: me.color, name: me.name }] }
-    const link = (serverBase() || location.origin) + '/?doc=' + s.cur;
+    const pb = this.linkBase(), link = pb.url + '/?doc=' + s.cur;
+    v.shareFull = link;
     v.shareUrl = link.replace(/^https?:\/\//, '');
+    v.linkExt = pb.ext;
+    v.linkLocal = !pb.ext;
+    v.linkNote = pb.ext ? 'Ekstern adresse via DuckDNS. Fungerer utenfor hjemmenettet.' : 'Lenken bruker serveradressen ' + pb.url.replace(/^https?:\/\//, '') + '. Slå på DuckDNS for å dele utenfor hjemmenettet.';
+    v.linkNoteAction = this.user.role === 'admin' && !pb.ext ? 'Sett opp DuckDNS' : '';
+    v.hasLinkAction = !!v.linkNoteAction;
     v.copyLink = () => {
       try { navigator.clipboard.writeText(link) } catch { /* */ }
       app.setState({ copied: true });
@@ -533,7 +756,20 @@ export class ServerSession {
       }
     }));
 
-    if (v.backupList) v.backupList = s.backups.map(k => ({ name: k.name, meta: k.date + ' · ' + k.size, onRestore: () => this.restoreBackup(k), onDownload: () => this.downloadBackup(k) }));
+    if (v.setRows && s.setTab === 'update' && s.updUi.found && s.updUi.found !== 'none')
+      v.setRows = v.setRows.map(r => (r.isUpd ? { ...r, fMeta: 'Utgitt ' + s.updUi.found.date + (s.updUi.found.size ? ' · ' + s.updUi.found.size : '') } : r));
+    if (v.backupList) v.backupList = s.backups.map(k => ({
+      name: k.name, meta: k.date + (k.time ? ' ' + k.time : '') + ' · ' + k.size + (k.files ? ' · ' + k.files + ' dokumenter' : ''), isRemote: !!k.remote,
+      onRestore: () => this.openRestore(k), onDownload: () => (k.fromFile ? app.toast('Filen ligger allerede hos deg') : this.downloadBackup(k))
+    }));
+    // «Finnes»/«Slettet» gjelder hele serveren, ikke bare dokumentene administratoren selv har
+    if (v.rs && v.rs.docs && s.restore) {
+      const k = s.backups.find(x => x.id === s.restore.id);
+      if (k && k.docs) v.rs.docs = v.rs.docs.map((x, i) => {
+        const ex = k.docs[i] && k.docs[i].exists;
+        return ex === undefined ? x : { ...x, tag: ex ? 'Finnes' : 'Slettet', tagBg: ex ? 'var(--kf3f1ed,#f3f1ed)' : 'var(--koklch096003075,oklch(0.96 0.03 75))', tagColor: ex ? 'var(--k6b6862,#6b6862)' : 'var(--k8a5310,#8a5310)' };
+      });
+    }
 
     if (this.pdf) {
       v.pages = [];

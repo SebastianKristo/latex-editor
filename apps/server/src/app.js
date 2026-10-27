@@ -5,20 +5,23 @@ import fastifyCors from '@fastify/cors';
 import cron from 'node-cron';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import { openDb, getSetting, setSetting } from './db.js';
 import { checkPass, hashPass, createUser, ensureAdmin, newSession, userFromToken, tokenOf, docRole, RANK } from './auth.js';
 import { compileTex, compileCache, synctexEdit, synctexView } from './compile.js';
+import { figureStore, renderFigures } from './figures.js';
 import { sendMail, inviteMail, sharedMail, commentMail, testMail, smtpProblem, transport } from './mail.js';
 import { duckUpdate, startDuck, DUCK_RE, TOKEN_RE } from './duckdns.js';
-import { testSmb, runBackup, listBackups, restoreBackup, downloadBackup } from './backup.js';
+import { testSmb, runBackup, listBackups, browseSmb, mkdirSmb, downloadBackup, readBackup, readBackupBuffer, backupDocs, restoreDocs, safetyBackup } from './backup.js';
 import { createSync, HIST, baseId } from './ysync.js';
 import { startTls } from './tls.js';
+import { createUpdater, currentVersion } from './update.js';
 
 const WEEK = 7 * 864e5;
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 const ROLES = ['Kan redigere', 'Kan kommentere', 'Kan lese'];
 
-export async function buildApp(cfg, { compile = compileTex, fetchImpl = fetch, background = true } = {}) {
+export async function buildApp(cfg, { compile = compileTex, figures = renderFigures, fetchImpl = fetch, background = true, updaterOpts = {} } = {}) {
   const db = openDb(cfg.dataDir);
   ensureAdmin(db, cfg);
   const app = Fastify({ logger: background, bodyLimit: 50 * 1024 * 1024 });
@@ -43,7 +46,17 @@ export async function buildApp(cfg, { compile = compileTex, fetchImpl = fetch, b
     }
     return v;
   };
-  const publicUrl = req => cfg.publicUrl || `${req.headers['x-forwarded-proto'] || req.protocol}://${req.headers.host}`;
+  const serverUrl = req => cfg.publicUrl || (req ? `${req.headers['x-forwarded-proto'] || req.protocol}://${req.headers.host}` : '');
+  // Delingslenker og invitasjoner: DuckDNS-adressen når den er på (README §10), ellers serveradressen.
+  const linkBase = req => {
+    const d = eff('duck');
+    if (d.on && d.links !== false && d.domain && DUCK_RE.test(d.domain)) {
+      const host = d.domain + '.duckdns.org';
+      return { url: d.tls ? 'https://' + host + (cfg.httpsPort === 443 ? '' : ':' + cfg.httpsPort) : 'http://' + host + (cfg.extPort === 80 ? '' : ':' + cfg.extPort), ext: true };
+    }
+    return { url: serverUrl(req).replace(/\/$/, ''), ext: false };
+  };
+  const publicUrl = req => linkBase(req).url;
   const docUrl = (req, id) => publicUrl(req) + '/?doc=' + id;
 
   app.decorateRequest('user', null);
@@ -78,7 +91,7 @@ export async function buildApp(cfg, { compile = compileTex, fetchImpl = fetch, b
       if (!smtp.notify || !c) return;
       const d = db.prepare('SELECT title, owner FROM documents WHERE id = ?').get(docId);
       if (!d) return;
-      const url = (cfg.publicUrl || '') + '/?doc=' + docId;
+      const url = publicUrl(null) + '/?doc=' + docId;
       db.prepare(`SELECT email FROM users WHERE id != ? AND (id = ? OR id IN (SELECT user_id FROM memberships WHERE doc_id = ?))`)
         .all(by.id, d.owner, docId)
         .forEach(o => sendMail(db, smtp, 'kommentar', o.email, commentMail({ from: by.name, docTitle: d.title, text: c.text, url }), [], { userId: by.id, docId, url }));
@@ -138,7 +151,7 @@ export async function buildApp(cfg, { compile = compileTex, fetchImpl = fetch, b
   });
   app.get('/api/docs/:id', { preHandler: needRole('Kan lese') }, async req => ({ doc: sync.readDoc(req.params.id), role: req.docRole }));
   app.delete('/api/docs/:id', { preHandler: needRole('Eier') }, async req => {
-    for (const t of ['memberships', 'invites', 'ydocs']) db.prepare(`DELETE FROM ${t} WHERE doc_id = ?`).run(req.params.id);
+    for (const t of ['memberships', 'invites', 'ydocs', 'figs']) db.prepare(`DELETE FROM ${t} WHERE doc_id = ?`).run(req.params.id);
     db.prepare('DELETE FROM ydocs WHERE doc_id = ?').run(req.params.id + HIST);
     db.prepare('DELETE FROM documents WHERE id = ?').run(req.params.id);
     return { ok: true };
@@ -152,7 +165,8 @@ export async function buildApp(cfg, { compile = compileTex, fetchImpl = fetch, b
     invites: db.prepare(`SELECT email, role, expires FROM invites WHERE doc_id = ? AND accepted IS NULL AND expires > ?
       AND email NOT IN (SELECT u.email FROM users u JOIN memberships m ON m.user_id = u.id WHERE m.doc_id = ?)`).all(req.params.id, Date.now(), req.params.id),
     linkRole: db.prepare('SELECT link_role FROM documents WHERE id = ?').get(req.params.id).link_role,
-    smtpReady: !smtpProblem(eff('smtp'))
+    smtpReady: !smtpProblem(eff('smtp')),
+    link: linkBase(req)
   }));
   app.post('/api/docs/:id/invites', { preHandler: needRole('Kan redigere') }, async (req, reply) => {
     const email = String(req.body?.email || '').trim().toLowerCase(), role = req.body?.role || 'Kan redigere';
@@ -211,23 +225,39 @@ export async function buildApp(cfg, { compile = compileTex, fetchImpl = fetch, b
   });
 
   // ---- kompilering + SyncTeX ----
-  const cache = compileCache(), warnings = new Map();
+  const cache = compileCache(), logs = new Map(), figStore = figureStore(join(cfg.dataDir, 'figs'));
   app.post('/api/compile', { preHandler: authed }, async (req, reply) => {
-    const { tex, files, engine } = req.body || {};
+    const { tex, files, engine, doc, figs: only } = req.body || {};
     if (typeof tex !== 'string' || !tex.includes('\\documentclass')) return reply.code(400).send({ error: 'Mangler LaTeX-kilde.' });
-    const r = await compile({ tex, files, engine, keep: true });
-    if (!r.ok) return reply.code(422).send({ errors: r.errors, warnings: r.warnings || [], log: r.log.slice(-20000), ms: r.ms });
+    // Figurene til forhåndsvisningen tegnes samtidig med PDF-en, bare for dokumenter brukeren har tilgang til.
+    const docId = typeof doc === 'string' && docRole(db, doc, req.user) ? doc : null;
+    const [r, fg] = await Promise.all([
+      compile({ tex, files, engine, keep: true }),
+      docId ? figures({ tex, files, engine, store: figStore, only }).catch(e => ({ figs: {}, errors: [{ message: e.message, line: null, hint: '' }] })) : { figs: {}, errors: [] }
+    ]);
+    const add = db.prepare('INSERT OR IGNORE INTO figs (doc_id, hash) VALUES (?, ?)');
+    for (const [h, st] of Object.entries(fg.figs)) if (st === 'ok') add.run(docId, h);
+    if (!r.ok) return reply.code(422).send({ errors: r.errors, warnings: r.warnings || [], figs: fg.figs, figErrors: fg.errors, log: r.log.slice(-20000), ms: r.ms });
     reply.header('x-compile-ms', String(r.ms));
     if (r.dir) {
       const cid = cache.put(r.dir);
-      warnings.set(cid, r.warnings || []);
-      if (warnings.size > 24) warnings.delete(warnings.keys().next().value);
+      logs.set(cid, { warnings: r.warnings || [], figs: fg.figs, figErrors: fg.errors });
+      if (logs.size > 24) logs.delete(logs.keys().next().value);
       reply.header('x-compile-id', cid);
     }
     return reply.type('application/pdf').send(r.pdf);
   });
-  // Advarsler fra siste vellykkede kompilering (PDF-svaret har ikke plass til dem)
-  app.get('/api/compile/:cid/log', { preHandler: authed }, async req => ({ warnings: warnings.get(req.params.cid) || [] }));
+  // Advarsler og figurstatus fra siste vellykkede kompilering (PDF-svaret har ikke plass til dem)
+  app.get('/api/compile/:cid/log', { preHandler: authed }, async req => logs.get(req.params.cid) || { warnings: [], figs: {}, figErrors: [] });
+  // Figurbilder: samme tilgangskontroll som dokumentet
+  app.get('/api/docs/:id/fig/:file', { preHandler: needRole('Kan lese') }, async (req, reply) => {
+    const h = String(req.params.file).replace(/\.svg$/, '');
+    if (!figStore.has(h) || !db.prepare('SELECT 1 FROM figs WHERE doc_id = ? AND hash = ?').get(req.params.id, h)) return reply.code(404).send({ error: 'Fant ikke figuren.' });
+    // SVG kan inneholde rå markup fra \\special; skript stoppes av CSP om noen åpner filen direkte.
+    return reply.type('image/svg+xml').header('cache-control', 'private, max-age=31536000, immutable')
+      .header('content-security-policy', "default-src 'none'; style-src 'unsafe-inline'").header('x-content-type-options', 'nosniff')
+      .send(await figStore.read(h));
+  });
   app.post('/api/compile/:cid/edit', { preHandler: authed }, async (req, reply) => {
     const dir = cache.get(req.params.cid);
     if (!dir) return reply.code(404).send({ error: 'Kompiler på nytt.' });
@@ -241,12 +271,12 @@ export async function buildApp(cfg, { compile = compileTex, fetchImpl = fetch, b
   });
 
   // ---- administrasjon (kun admin) ----
-  const ADMIN_KEYS = ['duck', 'smb', 'smtp', 'deploy', 'access'];
+  const ADMIN_KEYS = ['duck', 'smb', 'smtp', 'deploy', 'access', 'update'];
   const adminState = () => Object.fromEntries(ADMIN_KEYS.map(k => [k, eff(k)]));
   const duckLog = [];
   let backupRun = null;
   app.get('/api/admin/settings', { preHandler: admin }, async () => ({
-    ...adminState(), duckLog, backupRun,
+    ...adminState(), duckLog, backupRun, version: currentVersion(), updateMode: updater.mode(),
     users: db.prepare("SELECT COUNT(*) AS n, SUM(role = 'admin') AS admins FROM users").get()
   }));
   app.put('/api/admin/settings', { preHandler: admin }, async (req, reply) => {
@@ -291,6 +321,10 @@ export async function buildApp(cfg, { compile = compileTex, fetchImpl = fetch, b
     return { started: true };
   });
   let lastBackup = null;
+  // Mappevelgeren bruker verdiene i skjemaet (de er ikke nødvendigvis lagret ennå); passordet hentes fra lagret oppsett om det mangler.
+  const smbFrom = b => { const saved = eff('smb'); return { ...saved, ...Object.fromEntries(['host', 'user', 'pass', 'domain', 'ver'].filter(k => typeof b[k] === 'string').map(k => [k, b[k].trim ? (k === 'pass' ? b[k] : b[k].trim()) : b[k]])) } };
+  app.post('/api/admin/smb/browse', { preHandler: admin }, async req => browseSmb(smbFrom(req.body || {}), req.body?.share, req.body?.path || ''));
+  app.post('/api/admin/smb/mkdir', { preHandler: admin }, async req => mkdirSmb(smbFrom(req.body || {}), req.body?.share, req.body?.path || '', String(req.body?.name || '').trim()));
   app.get('/api/admin/backup/status', { preHandler: admin }, async () => ({ run: backupRun, last: lastBackup }));
   app.get('/api/admin/backups', { preHandler: admin }, async () => listBackups(eff('smb')));
   app.get('/api/admin/backups/:name', { preHandler: admin }, async (req, reply) => {
@@ -298,11 +332,64 @@ export async function buildApp(cfg, { compile = compileTex, fetchImpl = fetch, b
     if (!buf) return reply.code(404).send({ error: 'Fant ikke backupen.' });
     return reply.type('application/zstd').header('content-disposition', `attachment; filename="${req.params.name}"`).send(buf);
   });
-  app.post('/api/admin/backups/:name/restore', { preHandler: admin }, async req => {
-    const r = await restoreBackup(db, eff('smb'), req.params.name);
-    if (r.ok) sync.reset();
-    return r;
+  // Gjenoppretting (README §10): backup fra sharen eller fil, «Slå sammen» / «Erstatt alt», utvalg per dokument
+  // og sikkerhetskopi av nåværende tilstand først.
+  const uploads = new Map();
+  const dumpFor = async name => uploads.get(name)?.dump || readBackup(eff('smb'), name);
+  app.get('/api/admin/backups/:name/docs', { preHandler: admin }, async (req, reply) => {
+    const dump = await dumpFor(req.params.name);
+    if (!dump) return reply.code(404).send({ error: 'Fant ikke backupen.' });
+    return { name: req.params.name, docs: backupDocs(db, dump) };
   });
+  app.post('/api/admin/backups/upload', { preHandler: admin }, async (req, reply) => {
+    const { name = 'backup.json', b64 } = req.body || {};
+    const dump = typeof b64 === 'string' ? await readBackupBuffer(Buffer.from(b64, 'base64'), String(name)) : null;
+    if (!dump || !Array.isArray(dump.documents)) return reply.code(400).send({ error: 'Filen er ikke en gyldig Kobling-backup' });
+    const id = 'fil-' + randomBytes(6).toString('hex');
+    uploads.set(id, { dump, name: String(name).slice(0, 120) });
+    if (uploads.size > 4) uploads.delete(uploads.keys().next().value);
+    return { id, name: String(name).slice(0, 120), docs: backupDocs(db, dump) };
+  });
+  app.post('/api/admin/backups/:name/restore', { preHandler: admin }, async (req, reply) => {
+    const { mode = 'merge', ids, safety = true } = req.body || {};
+    if (!['merge', 'replace'].includes(mode)) return reply.code(400).send({ error: 'Ukjent modus.' });
+    if (ids !== undefined && (!Array.isArray(ids) || !ids.length)) return reply.code(400).send({ error: 'Velg minst ett dokument.' });
+    const dump = await dumpFor(req.params.name);
+    if (!dump) return reply.code(404).send({ ok: false, msg: 'Fant ikke backupen.' });
+    sync.flushAll();
+    let safe = null;
+    if (safety) {
+      safe = await safetyBackup(db, eff('smb'), cfg.dataDir);
+      if (!safe.ok) return { ok: false, msg: 'Sikkerhetskopien feilet, ingenting er endret: ' + safe.msg };
+    }
+    const n = restoreDocs(db, dump, { mode, ids, owner: req.user.id });
+    sync.reset();
+    return { ok: true, restored: n, safety: safe && safe.name };
+  });
+
+  // ---- oppdatering av serveren ----
+  const updater = createUpdater({
+    cfg, db, sync, eff, fetchImpl, ...updaterOpts,
+    saveSettings: p => setSetting(db, 'update', { ...getSetting(db, 'update', {}), ...p }),
+    backup: (smb, suffix) => runBackup(db, smb, () => {}, suffix),
+    log: x => app.log.info({ update: x })
+  });
+  app.get('/api/admin/update', { preHandler: admin }, async () => ({ ...updater.status(), mode: updater.mode(), settings: eff('update') }));
+  app.post('/api/admin/update/check', { preHandler: admin }, async (req, reply) => {
+    try { return await updater.check(req.body?.channel) } catch (e) { return reply.code(502).send({ error: e.message }) }
+  });
+  app.post('/api/admin/update/run', { preHandler: admin }, async (req, reply) => {
+    if (req.body?.rollback) {
+      const u = eff('update');
+      if (!u.prev || !u.prevRef) return reply.code(400).send({ error: 'Det finnes ingen tidligere versjon å gå tilbake til.' });
+      return updater.start({ tag: u.prevRef, ver: u.prev, rollback: true });
+    }
+    let found;
+    try { ({ found } = await updater.check()) } catch (e) { return reply.code(502).send({ error: e.message }) }
+    if (!found) return { ok: false, msg: 'Du har allerede nyeste versjon.' };
+    return updater.start({ tag: found.tag, ver: found.ver });
+  });
+  app.get('/api/admin/update/status', { preHandler: admin }, async () => updater.status());
 
   app.get('/sync/:id', { websocket: true }, (socket, req) => {
     const room = req.params.id, docId = baseId(room);
@@ -314,18 +401,32 @@ export async function buildApp(cfg, { compile = compileTex, fetchImpl = fetch, b
   });
 
   // ---- web-klienten ----
-  app.get('/api/health', async () => ({ ok: true }));
+  app.get('/api/health', async () => ({ ok: true, version: currentVersion().ver }));
   if (cfg.webDir && existsSync(cfg.webDir)) {
     await app.register(fastifyStatic, { root: cfg.webDir });
     app.setNotFoundHandler((req, reply) => req.url.startsWith('/api/') ? reply.code(404).send({ error: 'Finnes ikke.' }) : reply.sendFile('index.html'));
   }
 
   // ---- bakgrunnsjobber ----
-  let job = null, stopDuck = null, tls = null;
+  let job = null, updJob = null, updWait = null, stopDuck = null, tls = null;
+  // Automatisk oppdatering kl. 02/04/06: brukerne varsles 5 minutter før
+  async function autoUpdate() {
+    try {
+      const { found } = await updater.check();
+      if (!found) return;
+      const u = eff('update');
+      if (u.notify !== false) sync.notice('Serveren oppdateres til ' + found.ver + ' om 5 minutter. Endringene dine lagres.');
+      clearTimeout(updWait);
+      updWait = setTimeout(() => updater.start({ tag: found.tag, ver: found.ver }).then(r => app.log.info({ autoUpdate: r })), u.notify !== false ? 5 * 60000 : 0);
+    } catch (e) { app.log.warn({ autoUpdate: e.message }) }
+  }
   function reschedule() {
     if (!background) return;
     tls?.ensure(); // HTTPS slås av/på og sertifikat hentes straks innstillingene endres
     job?.stop();
+    updJob?.stop();
+    const u = eff('update'), hm = /^(\d{2}):(\d{2})$/.exec(u.time || '');
+    if (u.auto && hm) updJob = cron.schedule(`${Number(hm[2])} ${Number(hm[1])} * * *`, autoUpdate);
     const s = eff('smb');
     if (s.on && cron.validate(s.cron)) job = cron.schedule(s.cron, () => { sync.flushAll(); runBackup(db, eff('smb')).then(r => { lastBackup = r; app.log.info({ backup: r }) }) });
   }
@@ -340,7 +441,7 @@ export async function buildApp(cfg, { compile = compileTex, fetchImpl = fetch, b
       });
     });
   }
-  app.addHook('onClose', async () => { job?.stop(); stopDuck?.(); tls?.stop(); sync.flushAll(); cache.clear(); db.close() });
+  app.addHook('onClose', async () => { job?.stop(); updJob?.stop(); clearTimeout(updWait); updater.stop(); stopDuck?.(); tls?.stop(); sync.flushAll(); cache.clear(); db.close() });
   app.decorate('sync', sync);
   return app;
 }

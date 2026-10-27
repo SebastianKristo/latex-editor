@@ -8,6 +8,9 @@
 #   KOBLING_SRC      lokal kildemappe i stedet for git (for test eller uten nett til GitHub)
 #   KOBLING_PORT     port for nettleser og app (standard 8080, bare ved første installasjon)
 #   KOBLING_ADMIN_EMAIL / KOBLING_ADMIN_PASSWORD   oppretter administratoren (ellers i nettleseren)
+#
+# «kobling-update --request» kjøres av systemd (kobling-update.path) når administratoren trykker
+# «Oppdater nå» i appen: taggen leses fra $DATA/update/request.json, og resultatet skrives til status.json.
 set -euo pipefail
 
 REPO="${KOBLING_REPO:-https://github.com/SebastianKristo/latex-editor.git}"
@@ -25,6 +28,21 @@ warn() { printf "  ${Y}!${N} %s\n" "$1"; }
 fail() { printf "${R}Feil: %s${N}\n" "$1" >&2; exit 1; }
 
 [ "$(id -u)" -eq 0 ] || fail "kjør som root."
+
+# ---------- bestilt fra appen ----------
+if [ "${1:-}" = "--request" ] && [ -z "${KOBLING_REQ:-}" ]; then
+  REQF="$DATA/update/request.json"
+  [ -f "$REQF" ] || exit 0
+  KOBLING_BRANCH="$(node -e 'process.stdout.write(String(require(process.argv[1]).ref || "main"))' "$REQF")"
+  KOBLING_REQ="$(node -e 'process.stdout.write(String(require(process.argv[1]).to || ""))' "$REQF")"
+  export KOBLING_BRANCH KOBLING_REQ
+  BRANCH="$KOBLING_BRANCH"
+  rm -f "$REQF"
+  exec >"$DATA/update/log.txt" 2>&1
+fi
+if [ -n "${KOBLING_REQ:-}" ]; then
+  trap 'c=$?; printf "{\"done\":true,\"ok\":%s,\"to\":\"%s\",\"at\":%s000}\n" "$([ $c -eq 0 ] && echo true || echo false)" "$KOBLING_REQ" "$(date +%s)" > "$DATA/update/status.json"' EXIT
+fi
 command -v apt-get >/dev/null || fail "trenger Debian eller Ubuntu."
 export DEBIAN_FRONTEND=noninteractive
 UPDATE=0; [ -f "$ENVF" ] && UPDATE=1
@@ -34,7 +52,7 @@ step "Installerer systempakker (TeX Live tar noen minutter første gang)"
 apt-get update -qq
 apt-get install -y -qq --no-install-recommends \
   curl ca-certificates git gnupg tar zstd smbclient \
-  texlive-latex-extra texlive-pictures texlive-science texlive-lang-european latexmk >/dev/null
+  texlive-latex-extra texlive-pictures texlive-science texlive-lang-european latexmk dvisvgm >/dev/null
 ok "$(pdflatex --version | head -1)"
 
 # Node 22.13+ trengs for node:sqlite
@@ -67,7 +85,7 @@ fi
 NEW="$APP/src/deploy/proxmox/kobling-install.sh"
 if [ -z "${KOBLING_REEXEC:-}" ] && [ -f "$NEW" ] && [ -f "${BASH_SOURCE[0]:-}" ] && ! cmp -s "$NEW" "${BASH_SOURCE[0]}"; then
   ok "skriptet er oppdatert, fortsetter med ny versjon"
-  KOBLING_REEXEC=1 exec bash "$NEW"
+  KOBLING_REEXEC=1 exec bash "$NEW" "$@"
 fi
 
 # ---------- bygg ----------
@@ -80,6 +98,9 @@ pnpm --filter @kobling/web build >/dev/null
 rm -rf "$APP/app.new"
 pnpm --filter @kobling/server deploy --legacy --prod "$APP/app.new" >/dev/null
 cp -r apps/web/dist "$APP/app.new/web"
+git rev-parse --short HEAD > "$APP/app.new/BUILD" 2>/dev/null || true
+# Oppdatert fra appen til en release: versjonen er taggen (ellers versjonen i package.json)
+case "$BRANCH" in v[0-9]*) echo "${BRANCH#v}" > "$APP/app.new/VERSION" ;; esac
 cp deploy/proxmox/kobling-install.sh /usr/local/sbin/kobling-update
 chmod 755 /usr/local/sbin/kobling-update
 # pct exec har ikke /usr/local/sbin i PATH; /usr/bin finnes alltid.
@@ -88,8 +109,8 @@ ok "bygget"
 
 # ---------- bruker, data og innstillinger ----------
 id kobling >/dev/null 2>&1 || useradd --system --home "$DATA" --shell /usr/sbin/nologin kobling
-mkdir -p "$DATA" "$ETC"
-chown kobling:kobling "$DATA"; chmod 750 "$DATA"
+mkdir -p "$DATA/update" "$ETC"
+chown kobling:kobling "$DATA" "$DATA/update"; chmod 750 "$DATA"
 if [ "$UPDATE" -eq 0 ]; then
   step "Skriver $ENVF"
   {
@@ -109,6 +130,8 @@ fi
 PORT="$(sed -n 's/^KOBLING_LISTEN_PORT=//p' "$ENVF")"
 # Eldre installasjoner lyttet med HTTPS på 8443; ruteren videresender 443, så bruk 443 direkte.
 grep -q '^KOBLING_HTTPS_PORT=' "$ENVF" || echo "KOBLING_HTTPS_PORT=443" >> "$ENVF"
+# «Oppdater nå» i appen bruker kobling-update.path (under)
+grep -q '^KOBLING_INSTALL=' "$ENVF" || echo "KOBLING_INSTALL=proxmox" >> "$ENVF"
 
 # ---------- tjeneste ----------
 cat > /etc/systemd/system/kobling.service <<EOF
@@ -139,6 +162,26 @@ ReadWritePaths=$DATA /tmp
 WantedBy=multi-user.target
 EOF
 
+# «Oppdater nå» i appen: tjenesten (bruker kobling) legger en forespørsel, systemd kjører kobling-update som root
+cat > /etc/systemd/system/kobling-update.path <<EOF
+[Unit]
+Description=Kobling – oppdatering bestilt fra appen
+
+[Path]
+PathExists=$DATA/update/request.json
+
+[Install]
+WantedBy=multi-user.target
+EOF
+cat > /etc/systemd/system/kobling-update.service <<EOF
+[Unit]
+Description=Kobling – oppdatering
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/kobling-update --request
+EOF
+
 swap_app() { rm -rf "$APP/app.old"; [ -d "$APP/app" ] && mv "$APP/app" "$APP/app.old"; mv "$APP/app.new" "$APP/app"; }
 
 if [ -d /run/systemd/system ]; then
@@ -147,6 +190,7 @@ if [ -d /run/systemd/system ]; then
   systemctl stop kobling 2>/dev/null || true
   swap_app
   systemctl enable -q --now kobling
+  systemctl enable -q --now kobling-update.path
   for _ in $(seq 1 40); do curl -fsS "http://127.0.0.1:$PORT/api/health" >/dev/null 2>&1 && break; sleep 0.5; done
   curl -fsS "http://127.0.0.1:$PORT/api/health" >/dev/null 2>&1 || { journalctl -u kobling -n 30 --no-pager; fail "tjenesten svarer ikke."; }
   rm -rf "$APP/app.old"

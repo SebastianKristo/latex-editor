@@ -22,6 +22,7 @@ export function openDb(dataDir) {
       code TEXT PRIMARY KEY, doc_id TEXT NOT NULL, email TEXT NOT NULL, role TEXT NOT NULL,
       invited_by TEXT NOT NULL, expires INTEGER NOT NULL, accepted INTEGER
     );
+    CREATE TABLE IF NOT EXISTS figs (doc_id TEXT NOT NULL, hash TEXT NOT NULL, PRIMARY KEY (doc_id, hash));
     CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS mail_log (
       id INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT NOT NULL, to_addr TEXT NOT NULL, subject TEXT NOT NULL,

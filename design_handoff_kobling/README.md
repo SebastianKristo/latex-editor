@@ -138,9 +138,37 @@ Ingen bilder eller ikoner utover tekstglyfer (§ ¶ Ω α ∑ ⏚ ▣ ▦ ↗ �
 - `deploy/proxmox/install.sh`, `deploy/unraid/my-kobling-server.xml`, `deploy/docker-compose.yml`, `deploy/.env.example`, `deploy/README.md`.
 - `reference/main.tex` – skolens LaTeX-mal. `reference/kretsskjema-eksempel.png` – eksempel på krets studentene må tegne.
 
-## Forslag til første melding i Claude Code
-> Les `design_handoff_kobling/README.md` og åpne `prototype/Kobling App v2.dc.html`. Sett opp monorepoet i «Anbefalt stakk». Start med `packages/core` (flytt `docCode`, `circLines`, `parseCircuit`, `autoLayout`, `parseBlock` til TypeScript med tester), deretter `apps/web` (editor + PDF), så kretseditoren, så `apps/server` (Yjs, kompilering, invitasjoner, SMTP), og til slutt Tauri-appene og Docker-imaget. Følg prototypen pikselnært og bruk tekstene ordrett.
+## Prompt til Claude Code (bygg alt fra nytt)
+Lim inn denne i Claude Code i en tom mappe der `design_handoff_kobling/` ligger:
 
+```
+Les design_handoff_kobling/README.md fra start til slutt, også «Oppdateringer etter første handoff». Åpne prototype/Kobling App v2.dc.html i nettleseren og klikk gjennom alt. Den er fasiten for utseende og oppførsel. All UI-tekst skal være ordrett som i prototypen (norsk bokmål).
+
+Bygg Kobling fra bunnen av som et ekte produkt. Gå i denne rekkefølgen, og stopp etter hvert steg for å vise meg resultatet:
+
+1. Monorepo (pnpm): apps/web, apps/desktop (Tauri), apps/server, packages/core, packages/ui. TypeScript strict overalt.
+
+2. packages/core: flytt og skriv om disse funksjonene fra prototypen til TypeScript med Vitest-tester:
+   docCode, parseDoc, parseBlock, parseInline, preamble, circLines, parseCircuit, autoLayout, numberDoc, lintTex, texLabels, texMacros, texRender.
+   Krav: rundtur docCode → parseDoc → docCode gir identisk kode. lintTex gir ingen falske feil på reference/main.tex eller på en rapport med multicols, tikz-matriser og \newcommand.
+
+3. packages/ui + apps/web: design 1a fra README (kort-layout, Geist/Geist Mono, grønne aktive valg, lys/mørk/system via CSS-variabler, [data-paper] holdes lyst). Behold «SETT INN»-baren. Editoren bygges med TipTap/ProseMirror med egne noder for unit, sym, ref og raw. Kodevisningen bygges med CodeMirror 6 og LaTeX-syntaksfarger som i README, med innebygd visning av feil og advarsler fra lintTex.
+
+4. Kretseditoren: palett, lerret, autoplassering og «Lim inn LaTeX», som i prototypen.
+
+5. apps/server (Node + Fastify):
+   - Yjs-synk over WebSocket
+   - ekte kompilering med latexmk i en sandkasse
+   - parsing av latexmk-loggen til samme format som Logg-fanen (! …, l.NN, LaTeX Warning)
+   - bilder i bilder/
+   - roller, invitasjoner og Proton SMTP
+   - admin-API-er (403 for ikke-admin, også for historikk når den er slått av)
+   - DuckDNS og SMB-backup
+
+6. Docker-image og deploy/: bruk deploy/generators.js som den er. Tauri-apper for macOS og Windows.
+
+Kjør tester og typesjekk etter hvert steg. Når noe er uklart, er prototypen fasit. Spør meg bare hvis prototypen og README sier forskjellige ting.
+```
 
 ---
 
@@ -218,3 +246,27 @@ Komponenter v2:
 11. Bilder dratt inn i fillisten kan refereres fra koden med `\includegraphics{bilder/…}`.
 12. Mørk/lys/system bytter uten omstart; papirflater forblir lyse.
 13. Ikke-admin ser ikke Historikk når den er slått av, og API-et nekter.
+
+
+## 9. TikZ/CircuiTikZ-figurer i forhåndsvisningen (valgt løsning: bilde fra serveren)
+Den visuelle editoren kan ikke tegne TikZ selv. Prototypen viser derfor en stiplet plassholder: «tikzpicture · tegnes av serveren etter kompilering». I produktet skal plassholderen erstattes av et bilde av figuren fra den ekte kompileringen:
+
+- **Server:** ved hver kompilering trekkes hvert `tikzpicture`/`circuitikz`-miljø (inkludert omsluttende `\resizebox`) ut. Hver figur kompileres for seg med `\documentclass[tikz,border=2pt]{standalone}` og **samme preamble** (inkludert `doc.pre` og `\newcommand`-er), deretter `dvisvgm --no-fonts` → SVG.
+- **Mellomlager:** nøkkel = SHA-256 av (preamble + figurkode). Uendrede figurer kompileres aldri på nytt. Endepunkt: `GET /api/docs/:id/fig/:hash.svg` (samme tilgangskontroll som dokumentet).
+- **Klient:** `texRender` regner ut samme hash og viser `<img src=".../fig/<hash>.svg">` når den finnes. Ellers vises plassholderen med teksten over. Mens kompileringen pågår, vises plassholderen med en svak puls.
+- **Feil i en figur** vises i Logg-fanen med linjenummer i `main.tex` (oversatt fra standalone-loggen), og plassholderen blir rød: «Figuren kunne ikke tegnes · se logg».
+- PDF-en i høyrepanelet kommer alltid fra den ekte kompileringen, så figurer er riktige der uansett.
+
+
+## 10. Senere tillegg (alle i `Kobling App v2.dc.html`)
+- **Gjenopprett backup:** «Hent fra sharen» (lister backuper på SMB-sharen) og «Gjenopprett fra fil …» (.json). Dialog med «Slå sammen» / «Erstatt alt», avkrysning per dokument (merket Finnes/Slettet), «Ta backup av nåværende tilstand først» (på som standard, lager `…_for-gjenoppretting.tar.zst`).
+- **SMB-tilkobling med mappevelger:** steg 1 «Koble til server» (IP/vertsnavn, brukernavn, passord, Avansert: domene + SMB 2.1/3.0/3.1.1). Steg 2 «Velg mappe»: bla i sharer → mapper, klikkbar sti, ↑, «Ny mappe», «Bruk denne mappen». Serveren lister sharer og mapper med `smbclient`/`smb2`-bibliotek. Feilmeldinger: ugyldig IP, NT_STATUS_LOGON_FAILURE, ingen kontakt på port 445.
+- **Delingslenker via DuckDNS:** når DuckDNS er på (og «Bruk DuckDNS-adressen i delingslenker og invitasjoner» er på), bygges alle lenker fra `https://<navn>.duckdns.org` (eller `http://…:<port>` uten TLS). Delingsvinduet viser grønn/oransje status og snarvei «Sett opp DuckDNS» for admin.
+- **Oppdatering av serveren** (Innstillinger › Administrasjon › Oppdatering): versjon/kanal (Stabil/Beta), «Se etter oppdateringer» (GitHub Releases), «Oppdater nå» med steg (varsle brukere → last ned image → backup → stopp → migrer → start → helsesjekk), «Gå tilbake til <forrige>», automatisk oppdatering 02/04/06, `update.sh` per mål (Proxmox/Unraid/Compose).
+- **Enter i avsnitt = linjeskift** (`\\` i LaTeX). Shift/⌘+Enter = ny blokk.
+- **Skjul sidepanel:** knapp til venstre for logoen og ⌘\. Huskes.
+- **Dra blokker:** pekerbasert drag fra ⋮⋮ (ikke HTML5 DnD), blå strek over/under, autorull ved kantene.
+- **Angre/gjør om:** knapper ↶ ↷ etter «Fil», ⌘Z / ⇧⌘Z / ⌘Y (Ctrl på Windows). Egen historikk per dokument og for kretseditoren. Endringer innen 450 ms slås sammen. I tekstfelt brukes nettleserens egen angre.
+- **Komponentpalett** følger tema (lyse streker i mørk modus).
+- **Prosjektkort** viser ekte miniside (tittel, forfattere, overskrifter, tekst, bokser for figur/tabell/likning) i hvitt papir, skalert med container queries (`cqw`).
+- **Gi filer nytt navn:** dobbeltklikk eller blyant. Bilder: `\includegraphics` oppdateres. Kretser: label `fig:…` og alle referanser oppdateres. Validering av tegn og duplikater.

@@ -73,3 +73,51 @@ describe('egen preamble mot generert', () => {
     expect(e.map(x => x.line)).toEqual([3]);
   });
 });
+
+describe('preamble over flere linjer', () => {
+  const src = [
+    '\\documentclass[11pt,a4paper]{article}',
+    '\\usepackage[a4paper,',
+    '            top=2cm,',
+    '            marginparwidth=1.75cm]{geometry}',
+    '\\sisetup{',
+    '  output-complex-root = \\ensuremath{\\mathit{j}},',
+    '  output-decimal-marker = {,}',
+    '}',
+    '% Markering av grupper',
+    '\\newcommand{\\markcell}[1]{%',
+    '    \\draw[red] (#1.north west) rectangle (#1.south east);',
+    '}',
+    '\\author{Ola Nordmann, Kari Nordmann\\\\Gruppe 1}',
+    '\\begin{document}',
+    'Tekst.',
+    '\\end{document}'
+  ].join('\n');
+  const d0 = { ...makeDocs()[0], blocks: [] };
+  const r = parseDoc(src, d0, S), S2 = { ...S, ...r.settings };
+  const tex = code({ ...d0, ...r }, S2);
+
+  it('geometry over flere linjer erstatter den genererte (ingen option clash)', () => {
+    expect(tex.match(/\{geometry\}/g)).toHaveLength(1);
+    expect(tex).toContain('marginparwidth=1.75cm]{geometry}');
+    expect(lintTex(tex).filter(x => /Option clash/.test(x.msg))).toEqual([]);
+  });
+
+  it('en linje med bare } i en egen makro forsvinner ikke', () => {
+    expect(tex).toContain('\\newcommand{\\markcell}[1]{%\n    \\draw[red] (#1.north west) rectangle (#1.south east);\n}');
+    expect(lintTex(tex).filter(x => x.sev === 'error')).toEqual([]);
+  });
+
+  it('sisetup blir innstillinger, forfattere beholder mellomrom, og rundturen er stabil', () => {
+    expect(r.settings.dec).toBe(',');
+    expect(r.settings.imag).toBe('j');
+    expect(r.authors).toBe('Ola Nordmann, Kari Nordmann');
+    expect(r.pre).toContain('% Markering av grupper');
+    const r2 = parseDoc(tex, { ...d0, ...r }, S2);
+    expect(code({ ...d0, ...r, ...r2 }, { ...S2, ...r2.settings })).toBe(tex);
+  });
+
+  it('bilder med bare filnavn finnes i bilder/', () => {
+    expect(tex).toContain('\\graphicspath{{bilder/}}');
+  });
+});

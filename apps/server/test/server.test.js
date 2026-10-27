@@ -10,7 +10,7 @@ import { Y, applyDocToY, docFromY, applyCommentsToY } from '@kobling/core/ydoc';
 import { loadConfig } from '../src/config.js';
 import { buildApp } from '../src/app.js';
 import { createUser, newSession } from '../src/auth.js';
-import { texErrors } from '../src/compile.js';
+import { texErrors, texWarnings } from '../src/compile.js';
 import { restoreDump } from '../src/backup.js';
 
 let app, dir, adminTok, userTok, port;
@@ -220,6 +220,28 @@ test('uten innlogging og uten lenketilgang stenges sanntid', async () => {
   const c = yClient(docId, {});
   await c.ready;
   assert.equal(c.closed, 4401);
+});
+
+test('kompileringsloggen: ukjent kommando navngis, brutte linjer settes sammen, shell escape er ikke en advarsel', () => {
+  const log = [
+    '! Undefined control sequence.',
+    'l.52 u = U\\nb',
+    '               {D},\\quad d = \\nb{U}D.',
+    '',
+    "! Package pdftex.def Error: File `Screenshot 2026-10-26 at 16.27.32.png' not fo",
+    'und: using draft setting.',
+    '',
+    'See the pdftex.def package documentation for explanation.',
+    'l.114 ...26 at 16.27.32.png}',
+    '',
+    'Package epstopdf Warning: Shell escape feature is not enabled.'
+  ].join('\n');
+  const e = texErrors(log);
+  assert.equal(e[0].line, 52);
+  assert.match(e[0].hint, /^\\nb er ikke definert/);
+  assert.equal(e[1].message, "Package pdftex.def Error: File `Screenshot 2026-10-26 at 16.27.32.png' not found: using draft setting.");
+  assert.match(e[1].hint, /Filen mangler/);
+  assert.deepEqual(texWarnings(log), []);
 });
 
 test('backup-dump kan gjenopprettes', () => {

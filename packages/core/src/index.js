@@ -427,6 +427,8 @@ function preamble(S) {
     '\\usepackage{amsmath}',
     '\\usepackage[shortlabels]{enumitem}',
     '\\usepackage{graphicx}',
+    // opplastede bilder ligger i bilder/; \includegraphics{fil.png} skal også finne dem
+    '\\graphicspath{{bilder/}}',
     '\\usepackage{booktabs}',
     '\\usepackage[T1]{fontenc}',
     '\\usepackage{siunitx}',
@@ -451,6 +453,40 @@ const pkgsOf = s => {
   const m = s.match(USEPKG);
   return m ? { opts: (m[1] || '').trim(), names: m[2].split(',').map(x => x.trim()).filter(Boolean) } : null;
 };
+// Preamblen som hele setninger: linjer slås sammen til { } og [ ] går opp, så
+// \usepackage[a4paper,\n top=2cm]{geometry} og \newcommand over flere linjer blir én enhet.
+function texStatements(lines) {
+  const out = [];
+  let cur = null,
+    depth = 0;
+  const done = () => {
+    cur.text = cur.lines.join('\n');
+    out.push(cur);
+    cur = null;
+    depth = 0;
+  };
+  lines.forEach(l => {
+    if (!cur) cur = { lines: [] };
+    cur.lines.push(l);
+    const code = l.replace(/(^|[^\\])%.*$/, '$1');
+    for (let k = 0; k < code.length; k++) {
+      const c = code[k];
+      if (c === '\\') k++;
+      else if (c === '{' || c === '[') depth++;
+      else if (c === '}' || c === ']') depth--;
+    }
+    if (depth <= 0) done();
+  });
+  if (cur) done();
+  return out;
+}
+// Til sammenligning: uten kommentarer og med mellomrom slått sammen
+const texNorm = t =>
+  t
+    .replace(/(^|[^\\])%[^\n]*/g, '$1')
+    .replace(/\s+/g, ' ')
+    .replace(/\s*([,{}\[\]=])\s*/g, '$1')
+    .trim();
 function ownPreamble(gen, pre) {
   const out = gen.slice(),
     rest = [],
@@ -459,22 +495,22 @@ function ownPreamble(gen, pre) {
       const k = at(name);
       if (k >= 0) out.splice(k, 1);
     };
-  pre.forEach(s => {
-    const p = pkgsOf(s),
+  texStatements(pre).forEach(st => {
+    const p = pkgsOf(texNorm(st.text)),
       dup = p ? p.names.filter(n => at(n) >= 0) : [];
-    if (!dup.length) return rest.push(s);
+    if (!dup.length) return rest.push(...st.lines);
     if (!p.opts) {
       // samme pakke uten valg: den genererte linja dekker den allerede
       const left = p.names.filter(n => at(n) < 0);
       if (left.length) rest.push('\\usepackage{' + left.join(',') + '}');
-    } else if (p.names.length === 1) out[at(p.names[0])] = s;
+    } else if (p.names.length === 1) out.splice(at(p.names[0]), 1, ...st.lines);
     else {
       dup.forEach(drop);
-      rest.push(s);
+      rest.push(...st.lines);
     }
   });
   // cleveref må lastes etter hyperref
-  if (rest.some(s => (pkgsOf(s)?.names || []).includes('hyperref'))) {
+  if (texStatements(rest).some(st => (pkgsOf(texNorm(st.text))?.names || []).includes('hyperref'))) {
     const k = at('cleveref');
     if (k >= 0) {
       const [c] = out.splice(k, 1);
@@ -1056,7 +1092,7 @@ function parseDoc(src, doc, S) {
     };
   const settings = {},
     pre = [],
-    gen = new Set(preamble(S).map(x => x.trim()));
+    gen = new Set(texStatements(preamble(S)).map(st => texNorm(st.text)));
   let title = doc.title,
     authors = doc.authors,
     group = doc.group,
@@ -1070,11 +1106,20 @@ function parseDoc(src, doc, S) {
       break;
     }
   if (ei < 0) E(lines.length, 'Mangler \\end{document}');
-  for (let i = 0; i < bi; i++) {
-    const l = lines[i],
-      tl = l.trim();
+  for (const st of texStatements(lines.slice(0, bi))) {
+    const tl = texNorm(st.text),
+      // tittel og forfattere: bare kommentarer og linjeskift fjernes (mellomrom etter komma beholdes)
+      tx = st.text
+        .replace(/(^|[^\\])%[^\n]*/g, '$1')
+        .replace(/\s*\n\s*/g, ' ')
+        .trim();
     let m;
-    if (!tl) continue;
+    if (!st.text.trim()) continue;
+    // ren kommentar: tas vare på
+    if (!tl) {
+      pre.push(...st.lines);
+      continue;
+    }
     if ((m = tl.match(/^\\documentclass(?:\[([^\]]*)\])?\{([^}]*)\}/))) {
       const o = (m[1] || '').split(',').map(x => x.trim());
       const sz = o.find(x => /^(10|11|12)pt$/.test(x));
@@ -1082,23 +1127,28 @@ function parseDoc(src, doc, S) {
       settings.cols = o.includes('twocolumn') ? 2 : 1;
       continue;
     }
-    if ((m = tl.match(/^\\title\{(.*)\}$/))) {
+    if ((m = tx.match(/^\\title\{(.*)\}$/))) {
       title = unesc(m[1]);
       continue;
     }
-    if ((m = tl.match(/^\\author\{(.*)\}$/))) {
+    if ((m = tx.match(/^\\author\{(.*)\}$/))) {
       const p = m[1].split('\\\\');
       authors = unesc(p[0].trim());
       group = unesc((p[1] || '').trim());
       continue;
     }
     if (/^\\date\{/.test(tl)) continue;
-    if ((m = tl.match(/output-decimal-marker\s*=\s*\{(.)\}/))) {
-      settings.dec = m[1];
-      continue;
-    }
-    if (/output-complex-root/.test(tl) && (m = tl.match(/\\mathit\{(.)\}/))) {
-      settings.imag = m[1];
+    // \sisetup: desimaltegn og imaginær enhet blir innstillinger; andre nøkler beholdes som egen linje
+    if (/^\\sisetup\{/.test(tl)) {
+      if ((m = tl.match(/output-decimal-marker=\{(.)\}/))) settings.dec = m[1];
+      if ((m = tl.match(/output-complex-root=[^,]*\\mathit\{(.)\}/))) settings.imag = m[1];
+      const keys = tl
+        .slice(9, -1)
+        .split(/,(?![^{]*\})/)
+        .map(x => x.split('=')[0].trim())
+        .filter(Boolean);
+      if (keys.every(k => /^(output-complex-root|complex-root-position|exponent-product|output-decimal-marker)$/.test(k))) continue;
+      pre.push(...st.lines);
       continue;
     }
     if ((m = tl.match(/^\\usepackage\[(european|american)\]\{circuitikz\}/))) {
@@ -1110,7 +1160,7 @@ function parseDoc(src, doc, S) {
       continue;
     }
     if (gen.has(tl)) continue;
-    pre.push(l);
+    pre.push(...st.lines);
   }
   settings.indent = !noIndent;
   const raw = [];

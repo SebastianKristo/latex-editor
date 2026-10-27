@@ -6,13 +6,15 @@ import './theme.css';
 import { skeleton } from '@kobling/core';
 import templateSrc from './template.html?raw';
 import { setTemplate } from './dc-runtime';
-import App from './App.js';
+import Desktop from './App.js';
+import { withMobile } from './mobile/mobile.js';
 import { detectPlatform, windowControls } from './platform';
-import { api, isDesktop } from './api';
+import { api, isDesktop, isNativeApp } from './api';
 import { Login, LoginMode } from './Login';
 import { ServerSession, readCache } from './server-mode.js';
 
 (window as any).katex = katex;
+const App = withMobile(Desktop);
 setTemplate(templateSrc, windowControls);
 
 const params = new URLSearchParams(location.search);
@@ -63,7 +65,7 @@ async function boot() {
 }
 
 // Uten nett: appen lastes fra service worker-bufferen (bare på nettet; desktop og mobil har filene lokalt)
-if (!isDesktop() && !import.meta.env.DEV && 'serviceWorker' in navigator && location.protocol.startsWith('http'))
+if (!isDesktop() && !isNativeApp() && !import.meta.env.DEV && 'serviceWorker' in navigator && location.protocol.startsWith('http'))
   navigator.serviceWorker.register('/sw.js').catch(() => {});
 
 boot();

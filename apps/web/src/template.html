@@ -114,7 +114,7 @@
 <sc-if value="{{ noRefs }}" hint-placeholder-val="{{ false }}"><div style="padding:8px 10px;color:var(--k8d8982,#8d8982)">Ingen figurer, tabeller eller likninger ennå.</div></sc-if>
 </div></sc-if>
 </div>
-<sc-if value="{{ findOpen }}" hint-placeholder-val="{{ false }}"><div style="flex:none;border-bottom:1px solid var(--kebe8e3,#ebe8e3);background:var(--kf8f6f2,#f8f6f2);padding:10px 14px;display:flex;flex-direction:column;gap:8px;font-size:13px">
+<sc-if dc-part="find" value="{{ findOpen }}" hint-placeholder-val="{{ false }}"><div style="flex:none;border-bottom:1px solid var(--kebe8e3,#ebe8e3);background:var(--kf8f6f2,#f8f6f2);padding:10px 14px;display:flex;flex-direction:column;gap:8px;font-size:13px">
 <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
 <input value="{{ fd.q }}" onChange="{{ fd.onQ }}" onKeyDown="{{ fd.onKey }}" autoFocus="{{ true }}" placeholder="Søk i teksten" style="flex:1 1 150px;min-width:0;padding:6px 10px;border:1px solid oklch(0.55 0.15 250);border-radius:7px;outline:none;font-family:inherit;font-size:13px;background:var(--kfff,#fff);color:var(--k1f1e1c,#1f1e1c)">
 <input value="{{ fd.r }}" onChange="{{ fd.onR }}" placeholder="Erstatt med" style="flex:1 1 150px;min-width:0;padding:6px 10px;border:1px solid var(--ke2dfd9,#e2dfd9);border-radius:7px;outline:none;font-family:inherit;font-size:13px;background:var(--kfff,#fff);color:var(--k1f1e1c,#1f1e1c)">
@@ -127,7 +127,7 @@
 <sc-if value="{{ fd.hasResults }}" hint-placeholder-val="{{ false }}"><div style="max-height:170px;overflow:auto;display:flex;flex-direction:column;gap:1px"><sc-for list="{{ fd.results }}" as="r" hint-placeholder-count="3"><div onClick="{{ r.onClick }}" style="display:flex;gap:10px;align-items:baseline;padding:5px 8px;border-radius:6px;cursor:pointer" style-hover="background:var(--kfff,#fff)"><span style="flex:none;width:150px;font-size:11.5px;color:var(--k8d8982,#8d8982);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.where }}</span><span style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--k3d3a36,#3d3a36)">{{ r.before }}<mark style="background:oklch(0.9 0.12 95);color:#1f1e1c;border-radius:2px;padding:0 1px">{{ r.hit }}</mark>{{ r.after }}</span><span onClick="{{ r.onReplace }}" style="flex:none;font-size:12px;color:var(--koklch045015250,oklch(0.45 0.15 250));font-weight:500">Erstatt</span></div></sc-for></div></sc-if>
 </div></sc-if>
 <input ref="{{ fileRef }}" type="file" accept="image/*" multiple="{{ true }}" onChange="{{ onFilePick }}" style="display:none">
-<div ref="{{ edRef }}" lang="{{ spellLang }}" spellCheck="true" onMouseDown="{{ closeRefMenu }}" onDragOver="{{ edDragOver }}" onDragLeave="{{ edDragLeave }}" onDrop="{{ edDrop }}" onPaste="{{ edPaste }}" style="flex:1;overflow:auto;position:relative">
+<div dc-part="write" ref="{{ edRef }}" lang="{{ spellLang }}" spellCheck="true" onMouseDown="{{ closeRefMenu }}" onDragOver="{{ edDragOver }}" onDragLeave="{{ edDragLeave }}" onDrop="{{ edDrop }}" onPaste="{{ edPaste }}" style="flex:1;overflow:auto;position:relative">
 <div style="max-width:760px;margin:0 auto;padding:40px 72px 160px;display:flex;flex-direction:column;gap:6px">
 <div key="{{ titleKey }}" contentEditable="true" suppressContentEditableWarning="{{ true }}" onBlur="{{ onTitleBlur }}" style="font-size:32px;font-weight:600;letter-spacing:-.02em;line-height:1.2;outline:none">{{ docTitle }}</div>
 <div key="{{ authorsKey }}" contentEditable="true" suppressContentEditableWarning="{{ true }}" onBlur="{{ onAuthorsBlur }}" style="font-size:14px;color:var(--k7a766f,#7a766f);outline:none;margin-bottom:18px">{{ docAuthors }}</div>
@@ -199,7 +199,7 @@
 <div style="flex:1;min-height:0;display:flex;flex-direction:column;border-top:1px solid var(--ke2dfd9,#e2dfd9);background:var(--kf8f6f2,#f8f6f2)">
 <div style="height:34px;flex:none;display:flex;align-items:center;gap:14px;padding:0 16px;font-size:12px;color:var(--k6b6862,#6b6862);border-bottom:1px solid var(--ke9e6e0,#e9e6e0)"><span style="font-weight:600;color:var(--k3d3a36,#3d3a36)">main.tex</span><span style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Skriv, kopier og lim inn fritt. Endringer synkroniseres til editoren og PDF-en.</span><span onClick="{{ openLogFromCode }}" style="color:{{ lintColor }};white-space:nowrap;cursor:pointer;font-weight:500">{{ lintSummary }}</span><span style="color:{{ codeStatusColor }};white-space:nowrap">{{ codeStatus }}</span><span onClick="{{ copyCode }}" style="white-space:nowrap;cursor:pointer;color:var(--koklch045015250,oklch(0.45 0.15 250));font-weight:500">{{ copyCodeLabel }}</span></div>
 <sc-if value="{{ hasCodeErr }}" hint-placeholder-val="{{ false }}"><div style="flex:none;padding:7px 16px;font-size:12px;background:var(--koklch09600325,oklch(0.96 0.03 25));color:var(--kb3261e,#b3261e);border-bottom:1px solid var(--koklch0900525,oklch(0.9 0.05 25))">{{ codeErrText }}</div></sc-if>
-<div ref="{{ codeRef }}" style="flex:1;overflow:auto;font-family:'Geist Mono',monospace;font-size:12.5px;line-height:1.7">
+<div dc-part="code" ref="{{ codeRef }}" style="flex:1;overflow:auto;font-family:'Geist Mono',monospace;font-size:12.5px;line-height:1.7">
 <div style="position:relative;min-width:100%;width:max-content;padding:8px 0">
 <sc-for list="{{ codeLines }}" as="l" hint-placeholder-count="20"><div style="display:flex;padding:0 16px;background:{{ l.bg }};white-space:pre;pointer-events:none"><span style="width:38px;flex:none;color:{{ l.numColor }};font-weight:{{ l.numW }};text-align:right;padding-right:14px">{{ l.n }}</span><span><sc-for list="{{ l.parts }}" as="p" hint-placeholder-count="1"><span style="color:{{ p.c }};font-style:{{ p.fs }}">{{ p.t }}</span></sc-for></span><sc-if value="{{ l.hasMsg }}" hint-placeholder-val="{{ false }}"><span style="color:{{ l.msgColor }};font-style:italic;padding-left:28px;font-size:11.5px">{{ l.msg }}</span></sc-if></div></sc-for>
 <textarea value="{{ codeText }}" onChange="{{ onCodeInput }}" onBlur="{{ onCodeBlur }}" onKeyDown="{{ onCodeKey }}" onClick="{{ onCodeCaret }}" onKeyUp="{{ onCodeCaret }}" spellCheck="false" wrap="off" autoComplete="off" autoCorrect="off" autoCapitalize="off" style="position:absolute;top:8px;bottom:8px;left:54px;width:calc(100% - 54px);margin:0;padding:0 16px 0 0;box-sizing:border-box;border:none;outline:none;resize:none;overflow:hidden;background:transparent;color:transparent;caret-color:var(--k1f1e1c,#1f1e1c);font-family:'Geist Mono',monospace;font-size:12.5px;line-height:1.7;white-space:pre;tab-size:2"></textarea>
@@ -230,7 +230,7 @@
 
 <sc-if value="{{ isPdfTab }}" hint-placeholder-val="{{ true }}">
 <sc-if value="{{ pdfFailed }}" hint-placeholder-val="{{ false }}"><div style="flex:none;display:flex;align-items:center;gap:10px;padding:8px 14px;background:var(--koklch09600325,oklch(0.96 0.03 25));border-bottom:1px solid var(--koklch0900525,oklch(0.9 0.05 25));font-size:12.5px;color:var(--kb3261e,#b3261e)"><span style="flex:1">{{ pdfFailText }}</span><span onClick="{{ openLog }}" style="font-weight:600;cursor:pointer;white-space:nowrap">Vis logg</span></div></sc-if>
-<div ref="{{ pdfRef }}" style="flex:1;overflow:auto;padding:22px 0 60px;background:var(--kf3f1ed,#f3f1ed);display:flex;flex-direction:column;align-items:center;gap:18px;position:relative">
+<div dc-part="pdf" ref="{{ pdfRef }}" style="flex:1;overflow:auto;padding:22px 0 60px;background:var(--kf3f1ed,#f3f1ed);display:flex;flex-direction:column;align-items:center;gap:18px;position:relative">
 {{ pdfView }}
 <sc-for list="{{ pages }}" as="pg" hint-placeholder-count="2">
 <div data-paper="1" style="width:440px;height:{{ pg.outerH }};min-height:622px;flex:none;background:var(--kfff,#fff);box-shadow:0 4px 20px rgba(0,0,0,.12);padding:38px 34px 22px;display:flex;flex-direction:column;font-family:'STIX Two Text',serif;font-size:7.4px;line-height:1.45;color:var(--k111,#111);position:relative;zoom:{{ pdfZoom }}">
@@ -279,7 +279,7 @@
 </div>
 </sc-if>
 
-<sc-if value="{{ isBibTab }}" hint-placeholder-val="{{ false }}">
+<sc-if dc-part="bib" value="{{ isBibTab }}" hint-placeholder-val="{{ false }}">
 <div style="flex:none;padding:12px 14px;border-bottom:1px solid var(--ke2dfd9,#e2dfd9);display:flex;flex-direction:column;gap:8px;font-size:13px;background:var(--kf6f4f0,#f6f4f0)">
 <div style="display:flex;gap:8px"><input value="{{ bb.doi }}" onChange="{{ bb.onDoi }}" onKeyDown="{{ bb.onDoiKey }}" placeholder="DOI eller lenke, f.eks. 10.1109/5.771073" style="flex:1;min-width:0;padding:7px 10px;border:1px solid var(--ke2dfd9,#e2dfd9);border-radius:7px;outline:none;font-family:inherit;font-size:13px;background:var(--kfff,#fff);color:var(--k1f1e1c,#1f1e1c)"><div onClick="{{ bb.onLookup }}" style="padding:7px 14px;border-radius:7px;background:oklch(0.55 0.17 255);color:#fff;font-weight:600;cursor:pointer;white-space:nowrap">{{ bb.lookLabel }}</div></div>
 <div style="display:flex;gap:14px;font-size:12px;align-items:center"><span onClick="{{ bb.toggleBibtex }}" style="cursor:pointer;color:var(--koklch045015250,oklch(0.45 0.15 250));font-weight:500;white-space:nowrap">{{ bb.bibtexLabel }}</span><span onClick="{{ bb.onExport }}" style="cursor:pointer;color:var(--k6b6862,#6b6862);white-space:nowrap">Last ned refs.bib</span><span style="flex:1;text-align:right;color:{{ bb.msgColor }}">{{ bb.msg }}</span></div>
@@ -291,7 +291,7 @@
 </div>
 </sc-if>
 
-<sc-if value="{{ isCheckTab }}" hint-placeholder-val="{{ false }}">
+<sc-if dc-part="check" value="{{ isCheckTab }}" hint-placeholder-val="{{ false }}">
 <div style="flex:none;padding:12px 14px;border-bottom:1px solid var(--ke2dfd9,#e2dfd9);display:flex;align-items:center;gap:10px;font-size:13px;background:var(--kf6f4f0,#f6f4f0)"><div style="flex:1;min-width:0"><div style="font-weight:600">{{ ck.head }}</div><div style="font-size:12px;color:var(--k6b6862,#6b6862);line-height:1.4">Stavefeil, doble ord og verdier som bør skrives med \qty.</div></div><div style="display:flex;background:var(--kece9e3,#ece9e3);border-radius:7px;padding:2px;font-size:12px;flex:none"><sc-for list="{{ ck.langs }}" as="lg" hint-placeholder-count="2"><div onClick="{{ lg.onClick }}" style="padding:4px 9px;border-radius:5px;cursor:pointer;background:{{ lg.bg }};box-shadow:{{ lg.shadow }}">{{ lg.label }}</div></sc-for></div><sc-if value="{{ ck.canFixAll }}" hint-placeholder-val="{{ false }}"><div onClick="{{ ck.onFixAll }}" style="padding:5px 12px;border-radius:7px;border:1px solid var(--kd6d2cb,#d6d2cb);background:var(--kfff,#fff);font-size:12px;cursor:pointer;white-space:nowrap">Rett alle</div></sc-if></div>
 <div style="flex:1;overflow:auto;background:var(--kf6f4f0,#f6f4f0);display:flex;flex-direction:column;font-size:13px">
 <sc-for list="{{ ck.items }}" as="it" hint-placeholder-count="0"><div style="padding:10px 14px;border-bottom:1px solid var(--kebe8e3,#ebe8e3);display:flex;flex-direction:column;gap:6px"><div style="display:flex;gap:8px;align-items:center;min-width:0"><span style="font-size:11px;font-weight:600;padding:1px 7px;border-radius:4px;flex:none;background:{{ it.badgeBg }};color:{{ it.badgeColor }}">{{ it.kind }}</span><span onClick="{{ it.onGo }}" style="font-size:12px;color:var(--k6b6862,#6b6862);cursor:pointer;overflow:hidden;white-space:nowrap;text-overflow:ellipsis">{{ it.where }}</span></div><div style="line-height:1.5;color:var(--k3d3a36,#3d3a36)">{{ it.before }}<span style="text-decoration:underline wavy #c0392b;text-underline-offset:3px;color:var(--k1f1e1c,#1f1e1c);font-weight:500">{{ it.hit }}</span>{{ it.after }}</div><div style="display:flex;gap:10px;align-items:center"><div onClick="{{ it.onFix }}" style="padding:4px 10px;border-radius:7px;background:oklch(0.55 0.17 255);color:#fff;font-size:12px;font-weight:600;cursor:pointer">{{ it.fixLabel }}</div><span onClick="{{ it.onIgnore }}" style="font-size:12px;color:var(--k8d8982,#8d8982);cursor:pointer">Ignorer</span></div></div></sc-for>
@@ -313,7 +313,7 @@
 </div>
 </sc-if>
 
-<sc-if value="{{ isHistoryTab }}" hint-placeholder-val="{{ false }}">
+<sc-if dc-part="history" value="{{ isHistoryTab }}" hint-placeholder-val="{{ false }}">
 <sc-if value="{{ diffOpen }}" hint-placeholder-val="{{ false }}"><div style="flex:none;max-height:58%;overflow:auto;border-bottom:1px solid var(--ke2dfd9,#e2dfd9);background:var(--kfff,#fff);padding:12px 14px;display:flex;flex-direction:column;gap:10px;font-size:13px">
 <div style="display:flex;align-items:center;gap:8px"><div style="flex:1;min-width:0"><div style="font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ df.title }}</div><div style="font-size:12px;color:var(--k8d8982,#8d8982)">{{ df.sub }}</div></div><div onClick="{{ df.onRestore }}" style="padding:4px 10px;border-radius:6px;border:1px solid var(--kd6d2cb,#d6d2cb);font-size:12px;cursor:pointer;white-space:nowrap" style-hover="background:var(--kf6f4f0,#f6f4f0)">Gjenopprett denne</div><div onClick="{{ df.onClose }}" style="width:24px;height:24px;border-radius:6px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--k8d8982,#8d8982);font-size:16px" style-hover="background:var(--kf3f1ed,#f3f1ed)">×</div></div>
 <sc-for list="{{ df.rows }}" as="r" hint-placeholder-count="2"><div onClick="{{ r.onClick }}" style="display:flex;flex-direction:column;gap:5px;padding:8px 10px;border-radius:8px;border:1px solid var(--ke2dfd9,#e2dfd9);cursor:pointer" style-hover="border-color:var(--kd6d2cb,#d6d2cb)"><div style="display:flex;gap:8px;align-items:center;font-size:11.5px;min-width:0"><span style="font-weight:600;padding:1px 7px;border-radius:4px;flex:none;background:{{ r.tagBg }};color:{{ r.tagColor }}">{{ r.tag }}</span><span style="color:var(--k8d8982,#8d8982);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.where }}</span></div><div style="line-height:1.55;color:var(--k3d3a36,#3d3a36);word-break:break-word"><sc-for list="{{ r.parts }}" as="p" hint-placeholder-count="3"><span style="background:{{ p.bg }};color:{{ p.color }};text-decoration:{{ p.td }};border-radius:2px;white-space:pre-wrap">{{ p.t }}</span></sc-for></div></div></sc-for>
@@ -472,11 +472,11 @@
 </sc-if>
 </div>
 
-<sc-if value="{{ pickerOpen }}" hint-placeholder-val="{{ false }}">
+<sc-if dc-part="ov" value="{{ pickerOpen }}" hint-placeholder-val="{{ false }}">
 <div onMouseDown="{{ closePicker }}" style="position:absolute;inset:0;background:rgba(30,28,25,.28);display:flex;align-items:flex-start;justify-content:center;padding-top:80px;z-index:50">
 <div onMouseDown="{{ stop }}" style="width:780px;background:var(--kfff,#fff);border-radius:14px;box-shadow:0 30px 80px rgba(0,0,0,.25);overflow:hidden;display:flex;flex-direction:column">
 <div style="padding:12px 16px;border-bottom:1px solid var(--kebe8e3,#ebe8e3);display:flex;align-items:center;gap:10px"><input value="{{ pk.q }}" onChange="{{ pk.onQ }}" onKeyDown="{{ pk.onKey }}" placeholder="Søk: ohm, kilo, omega, liten l …" style="flex:1;border:none;outline:none;font-size:16px;font-family:inherit;color:var(--k1f1e1c,#1f1e1c);background:transparent"><div style="font-size:12px;color:var(--k8d8982,#8d8982);white-space:nowrap">↵ sett inn · esc lukk</div></div>
-<div style="display:flex;min-height:0">
+<div data-mpk="1" style="display:flex;min-height:0">
 <div style="width:180px;flex:none;background:var(--kf6f4f0,#f6f4f0);border-right:1px solid var(--kebe8e3,#ebe8e3);padding:10px;display:flex;flex-direction:column;gap:2px;font-size:13px"><sc-for list="{{ pk.tabs }}" as="t" hint-placeholder-count="2"><div onClick="{{ t.onClick }}" style="padding:7px 10px;border-radius:6px;cursor:pointer;background:{{ t.bg }};font-weight:{{ t.fw }}">{{ t.label }}</div></sc-for></div>
 <div style="flex:1;padding:18px 20px;display:flex;flex-direction:column;gap:16px;max-height:560px;overflow:auto">
 <sc-if value="{{ pk.isQty }}" hint-placeholder-val="{{ true }}">
@@ -548,7 +548,7 @@
 </div>
 </sc-if>
 
-<sc-if value="{{ newProjOpen }}" hint-placeholder-val="{{ false }}">
+<sc-if dc-part="ov" value="{{ newProjOpen }}" hint-placeholder-val="{{ false }}">
 <div onMouseDown="{{ closeNewProj }}" style="position:absolute;inset:0;background:rgba(30,28,25,.28);display:flex;align-items:center;justify-content:center;z-index:50">
 <div onMouseDown="{{ stop }}" style="width:520px;background:var(--kfff,#fff);border-radius:14px;box-shadow:0 30px 80px rgba(0,0,0,.25);padding:22px;display:flex;flex-direction:column;gap:16px;font-size:13px">
 <div style="font-size:18px;font-weight:600">Ny oblig i {{ group }}</div>
@@ -581,7 +581,7 @@
 </div>
 <div style="padding:12px 18px;border-top:1px solid var(--kebe8e3,#ebe8e3);display:flex;justify-content:flex-end"><div onClick="{{ closeMail }}" style="padding:7px 14px;border-radius:7px;border:1px solid var(--kd6d2cb,#d6d2cb);cursor:pointer">Lukk</div></div>
 </div></div></sc-if>
-<sc-if value="{{ pasteOpen }}" hint-placeholder-val="{{ false }}"><div onMouseDown="{{ closePaste }}" style="position:absolute;inset:0;background:rgba(30,28,25,.28);display:flex;align-items:flex-start;justify-content:center;padding-top:80px;z-index:60">
+<sc-if dc-part="ov" value="{{ pasteOpen }}" hint-placeholder-val="{{ false }}"><div onMouseDown="{{ closePaste }}" style="position:absolute;inset:0;background:rgba(30,28,25,.28);display:flex;align-items:flex-start;justify-content:center;padding-top:80px;z-index:60">
 <div onMouseDown="{{ stop }}" style="width:720px;background:var(--kfff,#fff);border-radius:14px;box-shadow:0 30px 80px rgba(0,0,0,.25);padding:20px;display:flex;flex-direction:column;gap:12px;font-size:13px">
 <div style="font-size:17px;font-weight:600">Lim inn CircuiTikZ eller SPICE</div>
 <div style="color:var(--k6b6862,#6b6862);line-height:1.45">Lim inn hele <span style="font-family:'Geist Mono',monospace">\begin{circuitikz}</span> … <span style="font-family:'Geist Mono',monospace">\end{circuitikz}</span>, eller bare <span style="font-family:'Geist Mono',monospace">\draw</span>- og <span style="font-family:'Geist Mono',monospace">\node</span>-linjene. Komponenter, verdier, porter, jord, forsyning og etiketter blir redigerbare på lerretet. En SPICE-netliste (for eksempel <span style="font-family:'Geist Mono',monospace">R1 1 2 220</span>) gjøres om automatisk.</div>
@@ -605,7 +605,7 @@
 <div onClick="{{ rs.toggleSafety }}" style="display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none"><div style="width:16px;height:16px;border-radius:4px;border:1.5px solid {{ rs.safeBorder }};background:{{ rs.safeBg }};color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center">{{ rs.safeCheck }}</div><span>Ta backup av nåværende tilstand først</span></div>
 <div style="display:flex;align-items:center;gap:8px"><span style="flex:1;color:var(--kb3261e,#b3261e);font-size:12px">{{ rs.warn }}</span><div onClick="{{ closeRestore }}" style="padding:7px 14px;border-radius:8px;border:1px solid var(--kd6d2cb,#d6d2cb);cursor:pointer">Avbryt</div><div onClick="{{ rs.onConfirm }}" style="padding:7px 14px;border-radius:8px;background:{{ rs.btnBg }};color:#fff;font-weight:600;cursor:{{ rs.btnCursor }}">{{ rs.btnLabel }}</div></div>
 </div></div></div></sc-if>
-<sc-if value="{{ plotOpen }}" hint-placeholder-val="{{ false }}"><div onMouseDown="{{ closePlot }}" style="position:absolute;inset:0;background:rgba(30,28,25,.28);display:flex;align-items:flex-start;justify-content:center;padding-top:56px;z-index:60">
+<sc-if dc-part="ov" value="{{ plotOpen }}" hint-placeholder-val="{{ false }}"><div onMouseDown="{{ closePlot }}" style="position:absolute;inset:0;background:rgba(30,28,25,.28);display:flex;align-items:flex-start;justify-content:center;padding-top:56px;z-index:60">
 <div onMouseDown="{{ stop }}" style="width:940px;max-width:calc(100% - 40px);background:var(--kfff,#fff);border-radius:14px;box-shadow:0 30px 80px rgba(0,0,0,.25);padding:20px;display:flex;flex-direction:column;gap:14px;font-size:13px;color:var(--k1f1e1c,#1f1e1c)">
 <div style="display:flex;align-items:center;gap:10px"><div style="font-size:17px;font-weight:600;flex:1">{{ pl.title }}</div><div style="display:flex;background:var(--kece9e3,#ece9e3);border-radius:7px;padding:2px;font-size:12px"><sc-for list="{{ pl.kinds }}" as="k" hint-placeholder-count="2"><div onClick="{{ k.onClick }}" style="padding:4px 12px;border-radius:5px;cursor:pointer;background:{{ k.bg }};box-shadow:{{ k.shadow }};font-weight:{{ k.fw }}">{{ k.label }}</div></sc-for></div></div>
 <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.25fr);gap:18px">
@@ -620,7 +620,7 @@
 </div>
 <div style="display:flex;justify-content:flex-end;gap:8px;align-items:center"><span style="flex:1;color:var(--kb3261e,#b3261e);font-size:12.5px">{{ pl.err }}</span><div onClick="{{ closePlot }}" style="padding:7px 14px;border-radius:7px;border:1px solid var(--kd6d2cb,#d6d2cb);cursor:pointer">Avbryt</div><div onClick="{{ pl.onSubmit }}" style="padding:7px 16px;border-radius:7px;background:oklch(0.55 0.17 255);color:#fff;font-weight:600;cursor:pointer">{{ pl.submitLabel }}</div></div>
 </div></div></sc-if>
-<sc-if value="{{ xlsOpen }}" hint-placeholder-val="{{ false }}"><div onMouseDown="{{ closeXls }}" style="position:absolute;inset:0;background:rgba(30,28,25,.28);display:flex;align-items:flex-start;justify-content:center;padding-top:80px;z-index:60">
+<sc-if dc-part="ov" value="{{ xlsOpen }}" hint-placeholder-val="{{ false }}"><div onMouseDown="{{ closeXls }}" style="position:absolute;inset:0;background:rgba(30,28,25,.28);display:flex;align-items:flex-start;justify-content:center;padding-top:80px;z-index:60">
 <div onMouseDown="{{ stop }}" style="width:600px;max-width:calc(100% - 40px);background:var(--kfff,#fff);border-radius:14px;box-shadow:0 30px 80px rgba(0,0,0,.25);padding:20px;display:flex;flex-direction:column;gap:12px;font-size:13px;color:var(--k1f1e1c,#1f1e1c)">
 <div style="font-size:17px;font-weight:600">Lim inn fra regneark</div>
 <div style="color:var(--k6b6862,#6b6862);line-height:1.45">{{ xl.info }}</div>

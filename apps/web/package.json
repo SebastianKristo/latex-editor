@@ -9,6 +9,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@capacitor/camera": "8.2.6",
+    "@capacitor/core": "8.5.3",
     "@kobling/core": "workspace:*",
     "@kobling/ui": "workspace:*",
     "@tauri-apps/api": "^2.12.4",

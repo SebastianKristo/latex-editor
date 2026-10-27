@@ -13,3 +13,18 @@ html:has([data-theme="dark"]),html:has([data-theme="dark"]) body{background:#0e0
 @keyframes kobling-pulse{0%,100%{opacity:.55}50%{opacity:.25}}
 [data-theme="dark"]{--fig-filter:invert(.9) hue-rotate(180deg)}
 [data-theme="dark"] [data-paper]{--fig-filter:none}
+
+/* Mobil og nettbrett (README §12): delene fra desktop-malen får mobilmål. */
+.k-mw>div>div{padding:22px 20px 80px!important;max-width:none!important}
+.k-mw>div>div>div:first-child{font-size:26px!important}
+.k-mp>div:first-child{padding:16px 0 70px!important;background:transparent!important}
+.k-ms>div{flex:1 1 auto}
+.k-mob input:not([type=file]),.k-mob select{font-size:16px!important}
+.k-mob .k-ov>div{padding:12px 8px!important}
+.k-mob .k-ov>div>div{width:auto!important;max-width:100%!important;max-height:calc(100% - 24px);overflow:auto}
+.k-mcirc svg{touch-action:none}
+.k-mob [data-mpk]{flex-direction:column}
+.k-mob [data-mpk]>div:first-child{width:auto!important;flex-direction:row!important;overflow-x:auto;border-right:none!important;border-bottom:1px solid #ebe8e3;white-space:nowrap}
+.k-mob [data-mpk]>div:first-child>div{padding:10px 12px!important}
+.k-mob [data-mpk]>div:nth-child(2){max-height:calc(100vh - 250px)!important;padding:14px!important}
+.k-mob [data-mpk]>div:nth-child(2)>div:first-child{flex-wrap:wrap}

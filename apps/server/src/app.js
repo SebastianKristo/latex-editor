@@ -28,9 +28,9 @@ export async function buildApp(cfg, { compile = compileTex, figures = renderFigu
   const app = Fastify({ logger: background, bodyLimit: 50 * 1024 * 1024 });
   app.decorate('db', db);
   await app.register(fastifyWs);
-  // Desktop-appen (Tauri) kjører fra egen opprinnelse og trenger CORS.
+  // Desktop-appen (Tauri) og mobilappen (Capacitor) kjører fra egen opprinnelse og trenger CORS.
   await app.register(fastifyCors, {
-    origin: (o, cb) => cb(null, !o || /^(tauri:\/\/localhost|https?:\/\/tauri\.localhost)$/.test(o)),
+    origin: (o, cb) => cb(null, !o || /^(tauri:\/\/localhost|https?:\/\/tauri\.localhost|capacitor:\/\/localhost|https:\/\/localhost)$/.test(o)),
     credentials: true,
     exposedHeaders: ['x-compile-id', 'x-compile-ms']
   });

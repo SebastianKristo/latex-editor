@@ -487,6 +487,19 @@ const texNorm = t =>
     .replace(/\s+/g, ' ')
     .replace(/\s*([,{}\[\]=])\s*/g, '$1')
     .trim();
+// Innlimt preamble legges til den som finnes: hele setninger som ikke finnes fra før
+// (linje for linje ville fjernet f.eks. en } som avslutter en egen makro).
+function mergePre(a, b) {
+  const have = new Set(texStatements(a || []).map(st => texNorm(st.text)));
+  const out = [...(a || [])];
+  texStatements(b || []).forEach(st => {
+    const k = texNorm(st.text);
+    if (k && have.has(k)) return;
+    have.add(k);
+    out.push(...st.lines);
+  });
+  return out;
+}
 function ownPreamble(gen, pre) {
   const out = gen.slice(),
     rest = [],
@@ -2067,6 +2080,13 @@ const ENV_PKG = {
 const MATH_ENV = /^(equation|align|gather|multline|flalign|alignat|eqnarray|math|displaymath)\*?$/,
   AMP_ENV =
     /^(tabular\*?|tabularx|longtable|array|align\*?|alignat\*?|flalign\*?|eqnarray|split|aligned|cases|[pbvV]?matrix)$/;
+// Valg i TikZ-koden og biblioteket de trenger
+const TIKZ_LIB = [
+  [/matrix of (?:math )?nodes/, 'matrix', 'matrix of nodes'],
+  [/\b(?:above|below|left|right)(?: (?:left|right))?\s*=\s*[^,\]=]*\bof\b/, 'positioning', 'above=… of'],
+  [/\(\$[^$]*![^$]*\$\)/, 'calc', '($(a)!…!(b)$)'],
+  [/\bfit\s*=\s*\(/, 'fit', 'fit']
+];
 function lintTex(src, files) {
   const D = [],
     seen = new Set(),
@@ -2350,6 +2370,31 @@ function lintTex(src, files) {
       'Mangler \\end{' + e.env + '}.'
     )
   );
+  // TikZ-valg som krever et bibliotek (\usetikzlibrary) – ellers «I do not know the key …»
+  if (pk.has('tikz') || pk.has('circuitikz')) {
+    const libs = new Set();
+    src.replace(/\\usetikzlibrary\{([^}]*)\}/g, (m, a) => (a.split(',').forEach(x => libs.add(x.trim())), m));
+    const body = src.indexOf('\\begin{document}'),
+      lineAt = i => src.slice(0, i).split('\n').length,
+      tikzLine = (() => {
+        const m = /\\usepackage(\[[^\]]*\])?\{(circuit)?tikz\}/.exec(src);
+        return m ? lineAt(m.index) : 0;
+      })();
+    TIKZ_LIB.forEach(([re, lib, what]) => {
+      if (libs.has(lib) || body < 0) return;
+      const m = new RegExp(re.source, 'g');
+      m.lastIndex = body;
+      const hit = m.exec(src);
+      if (!hit) return;
+      add(
+        lineAt(hit.index),
+        'error',
+        lib === 'matrix' ? "Package pgfkeys Error: I do not know the key '/tikz/matrix of nodes'." : 'TikZ: ' + what + ' krever biblioteket «' + lib + '».',
+        'TikZ-biblioteket «' + lib + '» er ikke lastet. Legg til \\usetikzlibrary{' + lib + '} i preambelen.'
+      );
+      if (tikzLine) D[D.length - 1].fix = { label: 'Legg til \\usetikzlibrary{' + lib + '}', line: tikzLine, append: '\n\\usetikzlibrary{' + lib + '}' };
+    });
+  }
   refs.forEach(r => {
     if (r.k && !labels[r.k])
       add(
@@ -3051,6 +3096,7 @@ function autoLayout(d) {
 
 export { sha256, figPreamble, figKey, extractFigures } from './figures.js';
 export {
+  mergePre,
   cellText,
   listCells,
   ACC,

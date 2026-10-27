@@ -77,6 +77,16 @@ test('feil i en figur gir linjenummer i main.tex', { skip: !hasTools && 'dvisvgm
   assert.equal(tex.split('\n')[e.line - 1], '\\ukjent');
 });
 
+test('matrisefigur med geometry i preamblen tegnes (Karnaugh-diagram)', { skip: !hasTools && 'dvisvgm mangler' }, async () => {
+  const km = '\\begin{tikzpicture}[font=\\small]\n\\matrix (m) [matrix of nodes, nodes={draw, minimum width=9mm, minimum height=9mm}, nodes in empty cells] {\n  0 & 1 \\\\\n  1 & 0 \\\\\n};\n\\end{tikzpicture}';
+  const tex = TEX('').replace('\\usepackage{tikz}', '\\usepackage[a4paper,\n  top=2cm]{geometry}\n\\usepackage{tikz}\n\\usetikzlibrary{matrix}').replace('\\resizebox{0.5\\textwidth}{!}{%\n\n}', km);
+  const [f] = extractFigures(tex);
+  assert.ok(f.code.startsWith('\\begin{tikzpicture}'));
+  const log = await logOf(await compile(tex));
+  assert.deepEqual(log.figErrors, []);
+  assert.equal(log.figs[f.hash], 'ok');
+});
+
 test('bare figurene klienten ber om tegnes', async () => {
   const res = await app.inject({ method: 'POST', url: '/api/compile', headers: H(tok), payload: { tex: TEX(GOOD).replace('R=$', 'L=$'), doc: docId, figs: [] } });
   assert.deepEqual((await logOf(res)).figs, {});

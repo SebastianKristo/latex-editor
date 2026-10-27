@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { makeDocs, docCode, parseDoc, lintTex, DEF_SET } from '../src/index.js';
+import { makeDocs, docCode, parseDoc, lintTex, mergePre, DEF_SET } from '../src/index.js';
 
 const S = { ...DEF_SET };
 const code = (d, s = S) => docCode(d, s).map(l => l.s).join('\n');
@@ -119,5 +119,35 @@ describe('preamble over flere linjer', () => {
 
   it('bilder med bare filnavn finnes i bilder/', () => {
     expect(tex).toContain('\\graphicspath{{bilder/}}');
+  });
+});
+
+describe('TikZ-biblioteker i feilsjekken', () => {
+  const doc = lib => ['\\documentclass{article}', '\\usepackage{tikz}', lib, '\\begin{document}',
+    '\\begin{tikzpicture}', '\\matrix (m) [matrix of nodes] { a & b \\\\ };', '\\node[above=2mm of m] {x};', '\\end{tikzpicture}', '\\end{document}'].join('\n');
+  const tikz = t => lintTex(t).filter(d => /tikz|TikZ/.test(d.msg));
+
+  it('matrix of nodes og above=… of uten bibliotek gir feil med hurtigretting', () => {
+    const d = tikz(doc(''));
+    expect(d.map(x => [x.line, x.sev])).toEqual([[6, 'error'], [7, 'error']]);
+    expect(d[0].hint).toContain('\\usetikzlibrary{matrix}');
+    expect(d[0].fix).toEqual({ label: 'Legg til \\usetikzlibrary{matrix}', line: 2, append: '\n\\usetikzlibrary{matrix}' });
+    expect(d[1].hint).toContain('\\usetikzlibrary{positioning}');
+  });
+
+  it('ingen feil når bibliotekene er lastet', () => {
+    expect(tikz(doc('\\usetikzlibrary{arrows.meta, positioning,matrix}'))).toEqual([]);
+  });
+
+  it('ingen falske funn i eksemplene', () => {
+    for (const d of makeDocs()) expect(tikz(code(d))).toEqual([]);
+  });
+});
+
+describe('innlimt preamble slås sammen setning for setning', () => {
+  it('en } som avslutter en egen makro beholdes selv om den finnes fra før', () => {
+    const a = ['\\newcommand{\\a}[1]{%', '  #1', '}'];
+    const b = ['\\newcommand{\\b}[1]{%', '  #1', '}', '\\newcommand{\\a}[1]{%', '  #1', '}', '\\usetikzlibrary{matrix}'];
+    expect(mergePre(a, b)).toEqual([...a, '\\newcommand{\\b}[1]{%', '  #1', '}', '\\usetikzlibrary{matrix}']);
   });
 });

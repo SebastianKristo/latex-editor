@@ -14,7 +14,7 @@ Designgrunnlaget ligger i `design_handoff_kobling/`. Fasiten er `prototype/Kobli
 | `apps/server` | Node 22 + Fastify + SQLite (`node:sqlite`): kontoer, roller, invitasjoner, Yjs-synk, kompilering med `latexmk` og SyncTeX, SMTP, DuckDNS, Let's Encrypt og SMB-backup. |
 | `apps/desktop` | Tauri 2-skall (macOS .dmg, Windows .msi, Linux .deb) rundt `apps/web`. |
 | `apps/mobile` | Capacitor 8-skall (Android .apk, iOS .ipa) rundt `apps/web`, med kamera via `@capacitor/camera`. Mobil-layouten ligger i `apps/web/src/mobile/`. |
-| `deploy/` | `generators.js` og ferdige filer for Proxmox, Unraid og Docker Compose, pluss Proxmox-helper-skriptet `proxmox/kobling.sh` (se `deploy/README.md`). |
+| `deploy/` | `generators.js` og ferdige filer for Proxmox, Unraid og Docker Compose, pluss Proxmox-helper-skriptet `proxmox/kobling.sh` (se «Installer på Proxmox VE» under). |
 
 ## Kom i gang
 
@@ -97,6 +97,56 @@ Første gang serveren startes uten brukere viser klienten «Opprett administrato
   - Videresend TCP 443 i ruteren til serveren. Docker mapper 443 til 8443 i containeren, og Proxmox-installasjonen lytter direkte på 443.
   - Virker ikke adressen hjemmefra, prøv fra mobilnett. Mange rutere sender ikke trafikk til egen offentlig IP tilbake inn (NAT-loopback).
 
+## Installer på Proxmox VE (helper-skript)
+
+Helper-skriptet lager en Debian 13-LXC på Proxmox VE 8 eller 9 og installerer Kobling rett i den, uten Docker. Det tar med TeX Live, Node.js 22 og en systemd-tjeneste.
+
+### Installere
+
+1. Åpne **Shell** på Proxmox-noden (Datacenter › node › Shell) og kjør:
+
+   ```sh
+   bash -c "$(curl -fsSL https://raw.githubusercontent.com/SebastianKristo/latex-editor/main/deploy/proxmox/kobling.sh)"
+   ```
+
+2. Velg en av to:
+   - **Ny container, standardinnstillinger:** neste ledige CT-ID, 2 kjerner, 2048 MB RAM, 12 GB disk og DHCP på `vmbr0`.
+   - **Ny container, velg selv:** du velger CT-ID, vertsnavn, CPU, RAM, disk, lagring, bro/VLAN, statisk IP, port og administrator.
+3. Installasjonen tar 5–10 minutter. Til slutt skriver skriptet adressen, for eksempel `http://192.168.1.50:8080`.
+4. Åpne adressen og opprett administratoren, hvis du ikke fylte den inn i skriptet.
+
+Uten spørsmål: `KOBLING_DEFAULTS=1 CTID=130 RAM=4096 bash -c "$(curl -fsSL …/kobling.sh)"`. Du kan også sette `CT_HOSTNAME`, `CORES`, `DISK`, `STORAGE`, `BRIDGE`, `IP`, `GATEWAY`, `VLAN`, `KOBLING_PORT`, `KOBLING_ADMIN_EMAIL` og `KOBLING_ADMIN_PASSWORD`.
+
+Containeren får taggen `kobling`. Slik finner skriptet den igjen når du skal oppdatere.
+
+### Oppdatere
+
+Innstillinger, brukere og dokumenter beholdes ved oppdatering. Den nye versjonen bygges ved siden av den gamle, og byttes inn først når bygget er ferdig. Feiler bygget, kjører den gamle versjonen videre.
+
+- **Med helper-skriptet (fra Proxmox):**
+  1. Kjør den samme kommandoen som ved installasjon.
+  2. Velg **Oppdater Kobling i CT …**.
+  3. Velg container hvis du har flere.
+  4. Skriv `main` for siste versjon, eller en tagg som `v0.3.0`.
+- **Med helper-skriptet, uten spørsmål:**
+
+  ```sh
+  KOBLING_UPDATE=130 bash -c "$(curl -fsSL https://raw.githubusercontent.com/SebastianKristo/latex-editor/main/deploy/proxmox/kobling.sh)"
+  KOBLING_UPDATE=130 KOBLING_BRANCH=v0.3.0 bash -c "$(curl -fsSL https://raw.githubusercontent.com/SebastianKristo/latex-editor/main/deploy/proxmox/kobling.sh)"
+  ```
+
+  `KOBLING_UPDATE=1` velger containeren automatisk når det bare finnes én med taggen `kobling`. En stoppet container startes først.
+- **Direkte i containeren:** `pct exec <CTID> -- kobling-update`, eventuelt med versjon: `pct exec <CTID> -- env KOBLING_BRANCH=v0.3.0 kobling-update`. Er Kobling installert før 27. oktober 2026, kjør `pct exec <CTID> -- /usr/local/sbin/kobling-update` den første gangen.
+- **Fra appen:** Innstillinger › Oppdatering › «Se etter oppdateringer» › «Oppdater nå» (bare administrator). Appen bestiller oppdateringen, og systemd kjører `kobling-update` for den valgte releasen.
+
+### Drift
+
+- **Innstillinger:** `/etc/kobling/kobling.env` i containeren, for eksempel med `pct exec <CTID> -- nano /etc/kobling/kobling.env`. Start deretter tjenesten på nytt med `pct exec <CTID> -- systemctl restart kobling`.
+- **Data:** `/var/lib/kobling`.
+- **Logg:** `pct exec <CTID> -- journalctl -u kobling -f`. Loggen fra oppdateringer bestilt fra appen ligger i `/var/lib/kobling/update/log.txt`.
+
+Andre måter å installere på (Docker i LXC, Unraid, Docker Compose) står i `deploy/README.md`.
+
 ## Server og image
 
 Konfigureres med miljøvariablene i `deploy/.env.example`. I tillegg finnes disse:
@@ -174,5 +224,5 @@ Imaget bygger på Debian 13 (trixie, TeX Live 2024). Grunnimaget kan overstyres 
 - **Let's Encrypt:** utvekslingen er ikke kjørt mot Let's Encrypt, fordi det krever et ekte DuckDNS-domene. Servering med sertifikat og fornyelseslogikken er testet.
 - **Mobilappen på ekte enheter:** APK og IPA bygges bare i CI. Dokumentskanner med perspektivkorrigering er ikke med; «Skann dokument» gir gråtone med høy kontrast og beskjæring med fire håndtak.
 - **Desktop-installere:** macOS (.dmg) og Windows (.msi) bygges bare i CI på egne runnere og er ikke kjørt her. Appene er ikke signert.
-- **Proxmox:** ikke kjørt på en ekte Proxmox-node. Helper-skriptet `kobling.sh` er testet med simulerte Proxmox-kommandoer, og installasjonsdelen (`kobling-install.sh`, inkludert `kobling-update`) er kjørt i en ren Ubuntu 24.04-container. «Oppdater nå» er kjørt uten systemd. Brukeren `kobling` la forespørselen, og `kobling-update --request` hentet taggen fra et git-repo, bygde og skrev versjonen og `status.json`. En tagg som ikke finnes ga `ok:false` uten å røre installasjonen. At `kobling-update.path` faktisk starter jobben, er ikke testet, fordi systemd ikke kjører her. Det Docker-baserte `install.sh` er bare syntakssjekket.
+- **Proxmox:** ikke kjørt på en ekte Proxmox-node. Helper-skriptet `kobling.sh` er testet med simulerte Proxmox-kommandoer (også oppdatering: valg av container og versjon, start av en stoppet container og feil for ukjent CT-ID), og installasjonsdelen (`kobling-install.sh`, inkludert `kobling-update`) er kjørt i en ren Ubuntu 24.04-container. «Oppdater nå» er kjørt uten systemd. Brukeren `kobling` la forespørselen, og `kobling-update --request` hentet taggen fra et git-repo, bygde og skrev versjonen og `status.json`. En tagg som ikke finnes ga `ok:false` uten å røre installasjonen. At `kobling-update.path` faktisk starter jobben, er ikke testet, fordi systemd ikke kjører her. Det Docker-baserte `install.sh` er bare syntakssjekket.
 - **Debian trixie-imaget:** Docker-imaget er testet med Ubuntu 24.04 som grunnimage, fordi Debian-speilene ikke var tilgjengelige her. Standardimaget (Debian trixie) bygges i CI.

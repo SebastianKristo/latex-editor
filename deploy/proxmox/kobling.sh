@@ -6,7 +6,11 @@
 #   bash -c "$(curl -fsSL https://raw.githubusercontent.com/SebastianKristo/latex-editor/main/deploy/proxmox/kobling.sh)"
 #
 # Uten spørsmål (standardverdier, kan overstyres):  KOBLING_DEFAULTS=1 CTID=130 RAM=4096 bash kobling.sh
-# Oppdatering senere:  pct exec <CTID> -- kobling-update
+#
+# Oppdatering: kjør samme kommando igjen og velg «Oppdater», eller uten spørsmål:
+#   KOBLING_UPDATE=130 bash -c "$(curl -fsSL …/kobling.sh)"                  (siste versjon fra main)
+#   KOBLING_UPDATE=130 KOBLING_BRANCH=v0.3.0 bash -c "$(curl -fsSL …/kobling.sh)"   (en bestemt versjon)
+# eller direkte:  pct exec <CTID> -- kobling-update
 set -euo pipefail
 
 RAW="${KOBLING_RAW:-https://raw.githubusercontent.com/SebastianKristo/latex-editor/${KOBLING_BRANCH:-main}/deploy/proxmox}"
@@ -39,6 +43,28 @@ PVE="$(pveversion 2>/dev/null | grep -oE 'pve-manager/[0-9]+' | cut -d/ -f2 || t
 [[ "$PVE" =~ ^(8|9)$ ]] || fail "krever Proxmox VE 8 eller 9 (fant ${PVE:-ukjent})."
 [ "$(dpkg --print-architecture)" = "amd64" ] || fail "bare amd64 støttes."
 
+# ---------- oppdatering av en eksisterende container ----------
+# Containere fra dette skriptet har taggen «kobling».
+kobling_cts() { for id in $(pct list 2>/dev/null | awk 'NR>1 {print $1}'); do pct config "$id" 2>/dev/null | grep -qE '^tags:.*\bkobling\b' && echo "$id"; done; }
+update_ct() {
+  local id="$1" ref="${KOBLING_BRANCH:-main}"
+  pct status "$id" >/dev/null 2>&1 || fail "CT $id finnes ikke."
+  if ! pct status "$id" | grep -q running; then pct start "$id"; sleep 3; fi
+  pct exec "$id" -- test -x /usr/local/sbin/kobling-update || fail "CT $id har ikke kobling-update. Er Kobling installert med dette skriptet?"
+  step "Oppdaterer Kobling i CT $id til $ref (et par minutter)"
+  pct exec "$id" -- env KOBLING_BRANCH="$ref" /usr/local/sbin/kobling-update
+  printf "\n${G}${B}✓ CT %s er oppdatert.${N} Innstillinger og dokumenter er beholdt.\n" "$id"
+  exit 0
+}
+if [ -n "${KOBLING_UPDATE:-}" ]; then
+  if [ "$KOBLING_UPDATE" = "1" ]; then
+    mapfile -t CTS < <(kobling_cts)
+    [ "${#CTS[@]}" -eq 1 ] || fail "fant ${#CTS[@]} Kobling-containere; oppgi CT-ID, f.eks. KOBLING_UPDATE=130."
+    update_ct "${CTS[0]}"
+  fi
+  update_ct "$KOBLING_UPDATE"
+fi
+
 # ---------- standardverdier ----------
 first_storage() { pvesm status -content "$1" 2>/dev/null | awk 'NR>1 && $3=="active" && !f {print $1; f=1}' || true; }
 CTID="${CTID:-$(pvesh get /cluster/nextid 2>/dev/null || echo 120)}"
@@ -55,8 +81,6 @@ VLAN="${VLAN:-}"
 KOBLING_PORT="${KOBLING_PORT:-8080}"
 KOBLING_ADMIN_EMAIL="${KOBLING_ADMIN_EMAIL:-}"
 KOBLING_ADMIN_PASSWORD="${KOBLING_ADMIN_PASSWORD:-}"
-[ -n "$STORAGE" ] || fail "fant ingen lagring for containere (rootdir)."
-[ -n "$TEMPLATE_STORAGE" ] || fail "fant ingen lagring for maler (vztmpl)."
 
 # ---------- spørsmål ----------
 ask() { whiptail --backtitle "Kobling · Proxmox VE helper" --title "$1" --inputbox "$2" 10 64 "$3" 3>&1 1>&2 2>&3; }
@@ -68,10 +92,21 @@ pick_storage() {
 }
 
 if [ -z "${KOBLING_DEFAULTS:-}" ] && [ -t 0 ] && command -v whiptail >/dev/null; then
+  mapfile -t CTS < <(kobling_cts)
+  UPD=(); [ "${#CTS[@]}" -gt 0 ] && UPD=(oppdater "Oppdater Kobling i CT ${CTS[*]}")
   MODE=$(whiptail --backtitle "Kobling · Proxmox VE helper" --title "$APP" --menu \
-    "Oppretter en Debian 13-container med Kobling, TeX Live og Node.js.\n\nStandard: CT $CTID, $CORES kjerner, $RAM MB RAM, $DISK GB disk, DHCP på $BRIDGE." 16 70 3 \
-    standard "Standardinnstillinger" avansert "Velg selv" avbryt "Avbryt" 3>&1 1>&2 2>&3) || exit 0
+    "Oppretter en Debian 13-container med Kobling, TeX Live og Node.js.\n\nStandard: CT $CTID, $CORES kjerner, $RAM MB RAM, $DISK GB disk, DHCP på $BRIDGE." 17 70 4 \
+    "${UPD[@]}" standard "Ny container, standardinnstillinger" avansert "Ny container, velg selv" avbryt "Avbryt" 3>&1 1>&2 2>&3) || exit 0
   [ "$MODE" = "avbryt" ] && exit 0
+  if [ "$MODE" = "oppdater" ]; then
+    UCT="${CTS[0]}"
+    if [ "${#CTS[@]}" -gt 1 ]; then
+      ITEMS=(); for id in "${CTS[@]}"; do ITEMS+=("$id" "$(pct config "$id" | awk '/^hostname:/ {print $2}')"); done
+      UCT=$(whiptail --backtitle "Kobling · Proxmox VE helper" --title "Oppdater" --menu "Hvilken container?" 15 60 6 "${ITEMS[@]}" 3>&1 1>&2 2>&3) || exit 0
+    fi
+    KOBLING_BRANCH=$(ask "Versjon" "main for siste versjon, eller en tagg som v0.3.0" "${KOBLING_BRANCH:-main}") || exit 0
+    update_ct "$UCT"
+  fi
   if [ "$MODE" = "avansert" ]; then
     CTID=$(ask "CT-ID" "ID for containeren" "$CTID") || exit 0
     CT_HOSTNAME=$(ask "Vertsnavn" "Vertsnavn for containeren" "$CT_HOSTNAME") || exit 0
@@ -93,6 +128,8 @@ if [ -z "${KOBLING_DEFAULTS:-}" ] && [ -t 0 ] && command -v whiptail >/dev/null;
 fi
 
 # ---------- validering ----------
+[ -n "$STORAGE" ] || fail "fant ingen lagring for containere (rootdir)."
+[ -n "$TEMPLATE_STORAGE" ] || fail "fant ingen lagring for maler (vztmpl)."
 [[ "$CTID" =~ ^[0-9]+$ ]] && [ "$CTID" -ge 100 ] || fail "CT-ID må være et tall fra 100."
 pct status "$CTID" >/dev/null 2>&1 && fail "CT $CTID finnes allerede. Velg en annen CT-ID."
 [[ "$CT_HOSTNAME" =~ ^[a-zA-Z0-9-]+$ ]] || fail "vertsnavn kan bare ha bokstaver, tall og bindestrek."
@@ -149,5 +186,5 @@ ADDR="$(pct exec "$CTID" -- hostname -I 2>/dev/null | awk '{print $1}')"
 printf "\n${G}${B}✓ Kobling kjører på http://%s:%s${N}\n" "${ADDR:-<ip>}" "$KOBLING_PORT"
 [ -z "$KOBLING_ADMIN_EMAIL" ] && echo "  Åpne adressen og opprett administratoren."
 echo "  Innstillinger:  pct exec $CTID -- nano /etc/kobling/kobling.env  (deretter: systemctl restart kobling)"
-echo "  Oppdatering:    pct exec $CTID -- kobling-update"
+echo "  Oppdatering:    kjør helper-skriptet igjen og velg «Oppdater», eller: pct exec $CTID -- kobling-update"
 echo "  Logg:           pct exec $CTID -- journalctl -u kobling -f"

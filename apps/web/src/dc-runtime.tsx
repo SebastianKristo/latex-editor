@@ -132,7 +132,7 @@ function renderNodes(nodes: Node[], scope: Scope, keyBase: string): React.ReactN
     const props: any = { key };
     let hover: React.CSSProperties | null = null;
     for (const [name, raw] of n.attrs) {
-      if (name.startsWith('hint-')) continue;
+      if (name.startsWith('hint-') || name === 'dc-part') continue;
       const v = value(raw, scope);
       if (name === 'style') props.style = cssToObj(String(v));
       else if (name === 'style-hover') hover = cssToObj(String(v));
@@ -154,7 +154,27 @@ function renderNodes(nodes: Node[], scope: Scope, keyBase: string): React.ReactN
 }
 
 let TREE: Node[] = [], GLOBALS: Scope = {};
-export function setTemplate(src: string, globals: Scope = {}) { TREE = parseTemplate(src); GLOBALS = globals }
+export function setTemplate(src: string, globals: Scope = {}) { TREE = parseTemplate(src); GLOBALS = globals; PARTS.clear() }
+
+// Deler av malen merket dc-part="navn" kan tegnes alene (mobil-layouten gjenbruker editoren, koden,
+// PDF-en og dialogene fra desktop).
+const PARTS = new Map<string, Node[]>();
+function findParts(nodes: Node[], name: string, out: Node[]) {
+  for (const n of nodes) {
+    if (typeof n === 'string') continue;
+    if (n.attrs.some(([k, v]) => k === 'dc-part' && v === name)) out.push(n);
+    else findParts(n.kids, name, out);
+  }
+  return out;
+}
+export function renderPart(name: string, scope: Scope): React.ReactElement {
+  if (!PARTS.has(name)) PARTS.set(name, findParts(TREE, name, []));
+  return React.createElement(React.Fragment, null, renderNodes(PARTS.get(name)!, { ...GLOBALS, ...scope }, 'p:' + name));
+}
+export function renderTree(tree: Node[], scope: Scope, keyBase = 'm'): React.ReactNode {
+  const nodes = renderNodes(tree, { ...GLOBALS, ...scope }, keyBase);
+  return nodes.length === 1 ? nodes[0] : React.createElement(React.Fragment, null, nodes);
+}
 
 // Basisklassen prototypen arver fra: render() binder malen mot renderVals().
 export class DCLogic<P = any, S = any> extends React.Component<P, S> {

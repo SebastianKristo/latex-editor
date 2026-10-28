@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>body{margin:0;background:#dfe1e6}a{color:oklch(0.45 0.15 250)}a:hover{color:oklch(0.38 0.15 250)}</style>
+</helmet>
+<section data-screen-label="Mobil og nettbrett" style="padding:64px;display:flex;flex-direction:column;gap:56px;font-family:'Geist',sans-serif;color:#1f1e1c;width:max-content">
+<div style="display:flex;flex-direction:column;gap:8px;max-width:760px"><div style="font-size:40px;font-weight:700;letter-spacing:-.02em">Kobling på mobil og nettbrett</div><div style="font-size:18px;line-height:1.5;color:#4a4742">Klikkbare prototyper øverst. Under ligger hver skjerm for iOS og Android. Trykk på et prosjekt, bytt mellom Skriv, Kode og PDF, trykk på feilpillen, kretsen eller Kamera i verktøylinjen over tastaturet.</div></div>
+
+<div style="display:flex;flex-direction:column;gap:20px">
+<div style="font-size:22px;font-weight:600">Klikkbare prototyper</div>
+<div style="display:flex;gap:48px;align-items:flex-start">
+<div id="1a" style="display:flex;flex-direction:column;gap:14px"><div style="display:flex;align-items:center;gap:10px"><span style="padding:3px 9px;border-radius:6px;background:#1f1e1c;color:#fff;font-size:13px;font-weight:600">1a</span><span style="font-size:16px;font-weight:600">iPhone</span></div>
+<x-import component-from-global-scope="IOSDevice" from="./ios-frame.jsx" hint-size="402px,874px"><dc-import name="Kobling Mobil App" style="display:block;width:100%;height:100%" device="ios" screen="projects" hint-size="100%,100%"></dc-import></x-import></div>
+<div id="1b" style="display:flex;flex-direction:column;gap:14px"><div style="display:flex;align-items:center;gap:10px"><span style="padding:3px 9px;border-radius:6px;background:#1f1e1c;color:#fff;font-size:13px;font-weight:600">1b</span><span style="font-size:16px;font-weight:600">Android</span></div>
+<x-import component-from-global-scope="AndroidDevice" from="./android-frame.jsx" hint-size="412px,892px"><dc-import name="Kobling Mobil App" style="display:block;width:100%;height:100%" device="android" screen="projects" hint-size="100%,100%"></dc-import></x-import></div>
+<div id="1c" style="display:flex;flex-direction:column;gap:14px"><div style="display:flex;align-items:center;gap:10px"><span style="padding:3px 9px;border-radius:6px;background:#1f1e1c;color:#fff;font-size:13px;font-weight:600">1c</span><span style="font-size:16px;font-weight:600">iPad, liggende</span></div>
+<div style="width:1180px;height:820px;border-radius:38px;border:14px solid #1b1b1d;box-shadow:0 40px 80px rgba(0,0,0,.2);overflow:hidden;background:#eceef2"><dc-import name="Kobling Mobil App" style="display:block;width:100%;height:100%" device="tablet" screen="doc" hint-size="100%,100%"></dc-import></div></div>
+</div>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:20px">
+<div style="font-size:22px;font-weight:600">iOS · alle skjermer</div>
+<div style="display:flex;gap:40px;align-items:flex-start">
+<sc-for list="{{ iosScreens }}" as="c" hint-placeholder-count="4"><div style="display:flex;flex-direction:column;gap:12px"><div style="display:flex;align-items:center;gap:10px"><span style="padding:3px 9px;border-radius:6px;background:#e2dfd9;font-size:13px;font-weight:600">{{ c.id }}</span><span style="font-size:16px;font-weight:600">{{ c.label }}</span></div>
+<x-import component-from-global-scope="IOSDevice" from="./ios-frame.jsx" hint-size="402px,874px"><dc-import name="Kobling Mobil App" style="display:block;width:100%;height:100%" device="ios" screen="{{ c.screen }}" seg="{{ c.seg }}" sheet="{{ c.sheet }}" keyboard="{{ c.kb }}" cam-step="{{ c.cam }}" hint-size="100%,100%"></dc-import></x-import></div></sc-for>
+</div>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:20px">
+<div style="font-size:22px;font-weight:600">Android · alle skjermer</div>
+<div style="display:flex;gap:40px;align-items:flex-start">
+<sc-for list="{{ androidScreens }}" as="c" hint-placeholder-count="4"><div style="display:flex;flex-direction:column;gap:12px"><div style="display:flex;align-items:center;gap:10px"><span style="padding:3px 9px;border-radius:6px;background:#e2dfd9;font-size:13px;font-weight:600">{{ c.id }}</span><span style="font-size:16px;font-weight:600">{{ c.label }}</span></div>
+<x-import component-from-global-scope="AndroidDevice" from="./android-frame.jsx" hint-size="412px,892px"><dc-import name="Kobling Mobil App" style="display:block;width:100%;height:100%" device="android" screen="{{ c.screen }}" seg="{{ c.seg }}" sheet="{{ c.sheet }}" keyboard="{{ c.kb }}" cam-step="{{ c.cam }}" hint-size="100%,100%"></dc-import></x-import></div></sc-for>
+</div>
+</div>
+</section>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+const SCR=[['projects','write','',false,'shoot','Prosjekter'],['doc','write','',true,'shoot','Skriv, med verktøylinje'],['doc','code','',true,'shoot','Kode med feilmarkering'],['doc','pdf','',false,'shoot','PDF med kommentarer'],['doc','write','log',false,'shoot','Feil og rettelser'],['doc','write','comments',false,'shoot','Kommentarer og svar'],['doc','write','insert',false,'shoot','Sett inn'],['circuit','write','',false,'shoot','Kretseditor'],['camera','write','',false,'shoot','Kamera'],['camera','write','',false,'review','Bilde blir figur'],['doc','write','share',false,'shoot','Deling']];
+class Component extends DCLogic {
+  renderVals(){const mk=p=>SCR.map(([screen,seg,sheet,kb,cam,label],i)=>({id:p+(i+1),screen,seg,sheet,kb,cam,label}));return{iosScreens:mk('i'),androidScreens:mk('a')}}
+}
+</script>
+</body>
+</html>

@@ -1,11 +1,13 @@
-// Kall mot Kobling-serveren. På web er serveren samme opprinnelse; i desktop-appen
+// Kall mot Kobling-serveren. På web er serveren samme opprinnelse; i desktop- og mobilappen
 // lagres serveradressen lokalt og økten sendes som Bearer-token.
 const LS_SERVER = 'kobling-server', LS_TOKEN = 'kobling-token';
 
 const read = (k: string) => { try { return localStorage.getItem(k) || '' } catch { return '' } };
 const write = (k: string, v: string) => { try { v ? localStorage.setItem(k, v) : localStorage.removeItem(k) } catch { /* privat modus */ } };
 
-export const isDesktop = () => '__TAURI_INTERNALS__' in window;
+// Mobilappen (Capacitor) har filene lokalt og snakker med en server på en annen adresse, som desktop.
+export const isNativeApp = () => { const c = (window as any).Capacitor; return !!(c && c.isNativePlatform && c.isNativePlatform()) };
+export const isDesktop = () => '__TAURI_INTERNALS__' in window || isNativeApp();
 export function serverBase(): string {
   if (!isDesktop()) return '';
   return read(LS_SERVER).replace(/\/+$/, '');

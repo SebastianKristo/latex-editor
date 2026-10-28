@@ -13,6 +13,7 @@ Designgrunnlaget ligger i `design_handoff_kobling/`. Fasiten er `prototype/Kobli
 | `apps/web` | Klienten (React 18 + Vite). UI-et kjøres fra v2-prototypens mal (`src/template.html`) via `src/dc-runtime.tsx`, så utseende og tekster er de samme som i prototypen. Tema for lys og mørk modus ligger i `src/theme.css`. `src/server-mode.js` kobler appen til serveren, `src/ysocket.ts` er Yjs-tilkoblingen, `src/PdfView.tsx` viser PDF med pdf.js, og `src/Login.tsx` er innlogging og førstegangsoppsett. |
 | `apps/server` | Node 22 + Fastify + SQLite (`node:sqlite`): kontoer, roller, invitasjoner, Yjs-synk, kompilering med `latexmk` og SyncTeX, SMTP, DuckDNS, Let's Encrypt og SMB-backup. |
 | `apps/desktop` | Tauri 2-skall (macOS .dmg, Windows .msi, Linux .deb) rundt `apps/web`. |
+| `apps/mobile` | Capacitor 8-skall (Android .apk, iOS .ipa) rundt `apps/web`, med kamera via `@capacitor/camera`. Mobil-layouten ligger i `apps/web/src/mobile/`. |
 | `deploy/` | `generators.js` og ferdige filer for Proxmox, Unraid og Docker Compose, pluss Proxmox-helper-skriptet `proxmox/kobling.sh` (se `deploy/README.md`). |
 
 ## Kom i gang
@@ -60,6 +61,26 @@ Første gang serveren startes uten brukere viser klienten «Opprett administrato
   - Automatisk oppdatering kjører kl. 02, 04 eller 06, og brukerne varsles 5 minutter før.
   - Etter en oppdatering laster åpne apper seg på nytt.
   - I Docker kan ikke containeren bytte sitt eget image. Der viser fanen `update.sh` for verten.
+- **Skrivefunksjoner** (handoff §11):
+  - Versjonsdiff med tilbakestilling, og svar på kommentarer.
+  - Maler for nye dokumenter.
+  - Kilder: DOI-oppslag mot Crossref og BibTeX-import (fra Zotero uten tap av felt), `\cite` med nummerering og litteraturliste.
+  - Grafer fra CSV (linje og Bode, skrives som `pgfplots`), tabeller med 2–8 kolonner og innliming fra Excel.
+  - SPICE-netlister blir kretsskjema.
+  - Formler-fanen.
+  - Søk og erstatt, også i alle prosjekter (kan angres i aktivt dokument).
+  - Sjekk-fanen med Hunspell for bokmål og engelsk i en Web Worker. Serveren leverer ordbøkene på `/dict/`.
+- **Uten nett:** hvert dokument lagres i IndexedDB (`y-indexeddb`), og en service worker holder appen tilgjengelig. Man kan skrive, lukke og åpne igjen uten nett. Ved tilkobling flettes endringene inn via Yjs. «Frakoblet modus» i profilmenyen kobler fra med vilje.
+- **Mobil og nettbrett** (handoff §12): under 700 px bredde, og i mobilappen, tegnes layouten fra `Kobling Mobil App.dc.html`:
+  - Prosjekter med søk og mapper.
+  - Dokument med Skriv | Kode | PDF (knip for å zoome).
+  - Bunnark for logg, kommentarer, deling, «Sett inn» og dokumentmeny (kilder, sjekk, versjoner, søk).
+  - Verktøylinje over tastaturet.
+  - Kretseditor med touch.
+  - Kamera med beskjæring (i appen via `@capacitor/camera`, i nettleseren via `getUserMedia`). Bildet komprimeres til maks 1600 px.
+  - Nettbrett (touch, opptil 1400 px) får sidepanel og editor/PDF 50/50.
+  - Skriv-, kode- og PDF-flatene og dialogene er de samme delene som på desktop (`dc-part` i malen).
+  - `?device=ios|android|tablet|desktop` overstyrer valget.
 - **Ellers fra prototypen:**
   - Enter i et avsnitt gir linjeskift (`\\`).
   - Sidepanelet kan skjules med ⌘\.
@@ -86,7 +107,12 @@ Konfigureres med miljøvariablene i `deploy/.env.example`. I tillegg finnes diss
 - `KOBLING_INSTALL` – `proxmox` (settes av installasjonen) eller `docker` (satt i imaget). Den avgjør hvordan «Oppdater nå» virker.
 - `KOBLING_UPDATE_REPO` (standard `SebastianKristo/latex-editor`) – repoet nye versjoner hentes fra.
 
-**Ny versjon:** bump `version` i `apps/server/package.json` (og desktop-appen), merge til `main`, og push taggen `vX.Y.Z`. Taggen lager en GitHub Release med desktop-appene, og serverne ser den under «Se etter oppdateringer».
+**Ny versjon:** bump `version` i `apps/server/package.json` (og desktop- og mobilappen), merge til `main`, og push taggen `vX.Y.Z`. Taggen lager en GitHub Release med desktop- og mobilappene, og serverne ser den under «Se etter oppdateringer».
+
+**Mobilappen:** `.github/workflows/mobile.yml` bygger APK og IPA, ved push som artefakter og ved release inn i releasen.
+- *Android:* for en fast signeringsnøkkel, legg inn hemmelighetene `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` og `ANDROID_KEY_PASSWORD`. Uten dem signeres APK-en med en debug-nøkkel, og da må appen avinstalleres før en ny versjon installeres.
+- *iOS:* IPA-en er usignert og må signeres med egen Apple-ID (AltStore eller Sideloadly).
+- *Lokalt:* `pnpm --filter @kobling/web build`, deretter `cd apps/mobile && npx cap sync`. Åpne så `android/` i Android Studio eller `ios/App/App.xcodeproj` i Xcode.
 
 ```sh
 docker build -t ghcr.io/sebastiankristo/kobling-server .
@@ -112,7 +138,21 @@ Imaget bygger på Debian 13 (trixie, TeX Live 2024). Grunnimaget kan overstyres 
   - Delingslenken bruker DuckDNS-adressen.
   - Oppdateringsfanen sjekker ekte GitHub Releases og viser `update.sh`.
   - Enter gir `\\`, angre og gjør om synkroniseres, nytt filnavn oppdaterer `\includegraphics`, og et skjult sidepanel huskes.
-- **Kjernen:** 118 tester (blant annet at klient og server får samme figurnøkkel). Rundtur visuell → LaTeX → visuell for alle blokker i eksemplene. Diodekretsen fra `main.tex` importeres og eksporteres uten tap. Yjs-modellen fletter samtidige endringer.
+- **Handoff §11 i nettleseren mot ekte server:**
+  - Stavekontroll retter «ogsa → også» og «tilatt → tillatt» via Hunspell i workeren.
+  - DOI-oppslag lagres i dokumentets kilder; Crossref er mocket, fordi den ikke nås herfra.
+  - «Erstatt alle» i to dokumenter lagres på serveren.
+  - Akseptanse 15: appen åpnes uten nett, endringer overlever lukking og synkes ved tilkobling.
+  - Et dokument med linje- og Bode-graf, `\cite`, 8-kolonners tabell og tre SPICE-kretser kompilerer med `latexmk`.
+- **Mobil (handoff §12), Playwright med iPhone 15, Pixel 7 og iPad (1180 × 820, touch) mot ekte server:**
+  - Prosjekter, Skriv, verktøylinjen over tastaturet, Kode og PDF.
+  - Arkene Logg, Kommentarer, Deling, Sett inn og dokumentmeny.
+  - Enhetsvelgeren og Kilder.
+  - Kretseditoren: velg, endre verdi, alle komponenter.
+  - Kameraet med simulert kamera: skann, beskjær, figurtekst og 50 % bredde gir et bilde i dokumentet, lagret på serveren.
+  - Nettbrett med sidepanel og PDF.
+  - Trykkflatene i mobilmalen er 36–50 px høye i verktøylinjer, som handoffen sier, og ellers minst 44 px.
+- **Kjernen:** 138 tester (blant annet at klient og server får samme figurnøkkel). Rundtur visuell → LaTeX → visuell for alle blokker i eksemplene. Diodekretsen fra `main.tex` importeres og eksporteres uten tap. Yjs-modellen fletter samtidige endringer.
 - **Serveren:** 26 tester, blant annet figurer med ekte `latex` + `dvisvgm` (mellomlager, tilgang, linjenummer ved feil), lenker via DuckDNS, og oppdatering (kanaler, bestilling til `kobling-update`, status etter omstart, Docker). Ikke-admin får 403 på alle admin-API-er. Invitasjoner og roller fungerer. Lesere og kommentatorer begrenses i Yjs. Varsel om nye kommentarer går på e-post. Utlogging, HTTPS-servering og DuckDNS-TXT er dekket.
 - **LaTeX:** alle 5 eksempeldokumentene kompilerer med `latexmk` uten feil, med én og med to spalter (lokalt med TeX Live 2023, og i Docker-imaget).
 - **I nettleseren (Playwright mot ekte server):**
@@ -132,6 +172,7 @@ Imaget bygger på Debian 13 (trixie, TeX Live 2024). Grunnimaget kan overstyres 
 
 - **Proton Mail:** ikke testet mot ekte Proton SMTP, fordi det krever konto og token. Samme kode er testet mot en lokal SMTP-server med STARTTLS og innlogging.
 - **Let's Encrypt:** utvekslingen er ikke kjørt mot Let's Encrypt, fordi det krever et ekte DuckDNS-domene. Servering med sertifikat og fornyelseslogikken er testet.
+- **Mobilappen på ekte enheter:** APK og IPA bygges bare i CI. Dokumentskanner med perspektivkorrigering er ikke med; «Skann dokument» gir gråtone med høy kontrast og beskjæring med fire håndtak.
 - **Desktop-installere:** macOS (.dmg) og Windows (.msi) bygges bare i CI på egne runnere og er ikke kjørt her. Appene er ikke signert.
 - **Proxmox:** ikke kjørt på en ekte Proxmox-node. Helper-skriptet `kobling.sh` er testet med simulerte Proxmox-kommandoer, og installasjonsdelen (`kobling-install.sh`, inkludert `kobling-update`) er kjørt i en ren Ubuntu 24.04-container. «Oppdater nå» er kjørt uten systemd. Brukeren `kobling` la forespørselen, og `kobling-update --request` hentet taggen fra et git-repo, bygde og skrev versjonen og `status.json`. En tagg som ikke finnes ga `ok:false` uten å røre installasjonen. At `kobling-update.path` faktisk starter jobben, er ikke testet, fordi systemd ikke kjører her. Det Docker-baserte `install.sh` er bare syntakssjekket.
 - **Debian trixie-imaget:** Docker-imaget er testet med Ubuntu 24.04 som grunnimage, fordi Debian-speilene ikke var tilgjengelige her. Standardimaget (Debian trixie) bygges i CI.

@@ -33,7 +33,7 @@ const blocks = ast.body.map(n => ({
   code: topSrc.slice(n.start, n.end),
   names: n.type === 'FunctionDeclaration' ? [n.id.name] : n.type === 'VariableDeclaration' ? n.declarations.map(d => d.id.name) : []
 }));
-const UI = new Set(['symEls', 'drawCircuit']);
+const UI = new Set(['symEls', 'drawCircuit', 'plotSvg']);
 const BROWSER = new Set(['SAVED', 'LSK', 'download', 'readImg', 'dataToBlob']);
 const pick = test => blocks.filter(b => b.names.some(test));
 const join_ = bs => bs.map(b => b.code).join('\n');

@@ -31,6 +31,28 @@ import {
   u,
   sy,
   rf,
+  citeSeg,
+  MATH,
+  SPELL_NB,
+  SPELL_EN,
+  parseCSV,
+  parseGrid,
+  plotLines,
+  citeNums,
+  bibTxt,
+  bibList,
+  bibKey,
+  parseBibtex,
+  toBibtex,
+  wdiff,
+  blockTxt,
+  textFields,
+  SP_LINE,
+  isSpice,
+  SPU,
+  SPP,
+  spiceVal,
+  spiceToTikz,
   pf,
   un,
   fmtNum,
@@ -110,7 +132,7 @@ import {
   parseCircuit,
   autoLayout
 } from '@kobling/core';
-import { symEls, drawCircuit } from '@kobling/ui';
+import { symEls, drawCircuit, plotSvg } from '@kobling/ui';
 import { DCLogic } from './dc-runtime';
 import { openChannel } from './sync';
 import * as GEN from '../../../deploy/generators.js';
@@ -302,7 +324,15 @@ export default class Component extends DCLogic {
     upd: { ...DEF_UPD, ...((SAVED && SAVED.upd) || {}) },
     updUi: { checking: false, found: null, run: null },
     smtp: { ...DEF_SMTP, ...((SAVED && SAVED.smtp) || {}) },
-    smtpUi: { showPass: false, test: null, testing: false }
+    smtpUi: { showPass: false, test: null, testing: false },
+    net: { on: typeof navigator === 'undefined' || navigator.onLine !== false, sim: false, queue: 0, syncing: false },
+    find: null,
+    plot: null,
+    xls: null,
+    bibUi: { doi: '', msg: '', err: false, busy: false, showBib: false, bibtex: '' },
+    diffH: null,
+    reply: null,
+    ignored: []
   };
   edRef = React.createRef();
   pdfRef = React.createRef();
@@ -320,6 +350,10 @@ export default class Component extends DCLogic {
     document.addEventListener('paste', this._pst);
     this._key = e => this.onKey(e);
     window.addEventListener('keydown', this._key);
+    this._on = () => this.setNet({ on: true });
+    this._off = () => this.setNet({ on: false });
+    window.addEventListener('online', this._on);
+    window.addEventListener('offline', this._off);
     this._mv = e => this.onMove(e);
     this._up = () => {
       this.drag = null;
@@ -374,6 +408,9 @@ export default class Component extends DCLogic {
     } catch (e) {}
   }
   componentWillUnmount() {
+    window.removeEventListener('online', this._on);
+    window.removeEventListener('offline', this._off);
+    clearTimeout(this._syt);
     document.removeEventListener('selectionchange', this._sel);
     document.removeEventListener('paste', this._pst);
     window.removeEventListener('keydown', this._key);
@@ -419,7 +456,19 @@ export default class Component extends DCLogic {
         } catch (e) {}
       }, 400);
     }
-    if ((ps.docs !== this.state.docs || ps.comments !== this.state.comments) && !this._remote && this.bc) {
+    if (ps.docs !== this.state.docs && !this._remote && this.netOff()) {
+      const tq = Date.now();
+      if (tq - (this._qt || 0) > 1500) {
+        this._qt = tq;
+        this.setState(s => ({ net: { ...s.net, queue: s.net.queue + 1 } }));
+      }
+    }
+    if (
+      (ps.docs !== this.state.docs || ps.comments !== this.state.comments) &&
+      !this._remote &&
+      this.bc &&
+      !this.netOff()
+    ) {
       try {
         this.bc.postMessage({ docs: this.state.docs, comments: this.state.comments });
       } catch (e) {}
@@ -502,6 +551,11 @@ export default class Component extends DCLogic {
       this.openPicker('qty');
       return;
     }
+    if (m && k === 'f' && !e.shiftKey && s.view === 'editor') {
+      e.preventDefault();
+      this.setState(x => ({ find: x.find ? null : { q: '', r: '', all: false, cs: false } }));
+      return;
+    }
     if (m && k === 'n') {
       e.preventDefault();
       this.setState({ newProj: { title: '', tpl: 'rapport', err: '' }, fileMenu: false });
@@ -529,6 +583,9 @@ export default class Component extends DCLogic {
     }
     if (e.key === 'Escape') {
       if (s.restore) return this.setState({ restore: null });
+      if (s.plot) return this.setState({ plot: null });
+      if (s.xls) return this.setState({ xls: null });
+      if (s.find && !s.picker) return this.setState({ find: null });
       if (s.profileOpen) return this.setState({ profileOpen: false });
       if (s.fileMenu) return this.setState({ fileMenu: false });
       if (s.picker) return this.setState({ picker: null });
@@ -546,6 +603,165 @@ export default class Component extends DCLogic {
       else if (k === 'v') this.circSet({ tool: 'select', pending: null });
     }
   }
+  netOff() {
+    const n = this.state.net;
+    return !n.on || n.sim;
+  }
+  setNet(p) {
+    const was = this.netOff();
+    this.setState(
+      s => ({ net: { ...s.net, ...p } }),
+      () => {
+        const off = this.netOff();
+        if (was && !off) {
+          const q = this.state.net.queue;
+          this.setState(s => ({ net: { ...s.net, syncing: true } }));
+          clearTimeout(this._syt);
+          this._syt = setTimeout(() => {
+            this.setState(s => ({ net: { ...s.net, syncing: false, queue: 0 } }));
+            this.toast(
+              q ? 'Synkronisert · ' + q + (q === 1 ? ' endring' : ' endringer') + ' lastet opp' : 'Tilkoblet igjen'
+            );
+          }, 1400);
+        } else if (!was && off) this.toast('Frakoblet. Endringer lagres lokalt og synkroniseres senere.');
+      }
+    );
+  }
+  csvRef = React.createRef();
+  openPlot(b) {
+    this.setState({
+      plot: b
+        ? {
+            bid: b.id,
+            csv: b.csv || '',
+            kind: b.kind || 'line',
+            xlabel: b.xlabel || '',
+            ylabel: b.ylabel || '',
+            caption: b.caption || '',
+            err: ''
+          }
+        : { bid: null, after: this.state.active, csv: '', kind: 'line', xlabel: '', ylabel: '', caption: '', err: '' }
+    });
+  }
+  plotSet(p) {
+    this.setState(s => ({ plot: { ...s.plot, ...p, err: '' } }));
+  }
+  plotSample(kind) {
+    if (kind === 'bode') {
+      const fc = 1591.5,
+        L = ['f [Hz];|H| [dB];Fase [°]'];
+      for (let e = 1; e <= 5.001; e += 0.125) {
+        const f = Math.pow(10, e),
+          r = f / fc;
+        L.push(
+          (f < 100 ? f.toFixed(1) : f.toFixed(0)) +
+            ';' +
+            (-10 * Math.log10(1 + r * r)).toFixed(2) +
+            ';' +
+            ((-Math.atan(r) * 180) / Math.PI).toFixed(1)
+        );
+      }
+      return {
+        csv: L.join('\n'),
+        xlabel: 'Frekvens $f$ [Hz]',
+        ylabel: '$|H|$ [dB]',
+        caption: 'Bode-diagram for RC-lavpassfilteret.'
+      };
+    }
+    const L = ['t [ms];v_C [V]'];
+    for (let i = 0; i <= 40; i++) {
+      const tm = i * 0.25;
+      L.push(tm.toFixed(2) + ';' + (5 * (1 - Math.exp(-tm / 2.2))).toFixed(3));
+    }
+    return { csv: L.join('\n'), xlabel: 'Tid $t$ [ms]', ylabel: '$v_C$ [V]', caption: 'Opplading av kondensatoren.' };
+  }
+  submitPlot() {
+    const p = this.state.plot,
+      d = parseCSV(p.csv);
+    if (d.rows.length < 2) return this.plotSet({ err: 'Trenger minst to rader med tall.' });
+    if (p.kind === 'bode' && d.rows.some(r => r[0] <= 0))
+      return this.setState(s => ({ plot: { ...s.plot, err: 'Bode-diagram krever frekvenser over 0.' } }));
+    const data = { csv: p.csv, kind: p.kind, xlabel: p.xlabel, ylabel: p.ylabel, caption: p.caption || 'Graf.' };
+    this.setState({ plot: null });
+    if (p.bid) this.updBlock(p.bid, data, 'Oppdaterte graf');
+    else
+      this.addBlockAfter(
+        p.after,
+        { type: 'plot', ...data, label: 'fig:graf-' + uid().slice(0, 4) },
+        'La til graf',
+        false
+      );
+  }
+  applyGrid(bid, rows) {
+    this.updBlock(bid, { rows }, 'Limte inn tabell');
+    this.toast('Limte inn ' + rows.length + ' rader × ' + rows[0].length + ' kolonner');
+  }
+  insertMath(tex) {
+    this.setState({ picker: null });
+    const a = this.findBlock(this.state.active);
+    if (a && a.type === 'eq') this.updBlock(a.id, { src: ((a.src || '') + ' ' + tex).trim() }, 'Satt inn ' + tex);
+    else
+      this.addBlockAfter(
+        this.state.active,
+        { type: 'eq', src: tex, label: 'eq:' + uid().slice(0, 4) },
+        'La til likning',
+        false
+      );
+  }
+  gotoHit(did, bid) {
+    if (did !== this.state.cur) {
+      this.openDoc(did);
+      setTimeout(() => this.focusBlock(bid, 'search'), 60);
+    } else this.focusBlock(bid, 'search');
+  }
+  bibSet(p) {
+    this.setState(s => ({ bibUi: { ...s.bibUi, ...p } }));
+  }
+  addBib(entries) {
+    const doc = this.curDoc(),
+      have = new Set((doc.bib || []).map(e => e.key));
+    const add = entries.map(e => {
+      let k = e.key || bibKey(e);
+      const k0 = k;
+      let i = 1;
+      while (have.has(k)) k = k0 + String.fromCharCode(96 + i++);
+      have.add(k);
+      return { ...e, key: k };
+    });
+    this.setDoc(
+      d => ({ ...d, bib: [...(d.bib || []), ...add] }),
+      'La til ' + add.length + (add.length === 1 ? ' kilde' : ' kilder')
+    );
+    return add;
+  }
+  lookupDoi = () => {
+    const raw = (this.state.bibUi.doi || '').trim(),
+      m = raw.match(/10\.\d{4,9}\/[^\s]+/);
+    if (!m) return this.bibSet({ msg: 'Fant ingen DOI i teksten.', err: true });
+    if (this.netOff()) return this.bibSet({ msg: 'Frakoblet. DOI-oppslag krever nett.', err: true });
+    const doi = m[0].replace(/[.,;]$/, '');
+    this.bibSet({ busy: true, msg: 'Slår opp …', err: false });
+    fetch('https://api.crossref.org/works/' + encodeURIComponent(doi))
+      .then(r => {
+        if (!r.ok) throw 0;
+        return r.json();
+      })
+      .then(j => {
+        const x = j.message || {},
+          au = (x.author || []).map(a => [a.given, a.family].filter(Boolean).join(' ') || a.name).filter(Boolean);
+        const e = {
+          type: x.type === 'journal-article' ? 'article' : x.type === 'book' ? 'book' : 'misc',
+          author: au.length > 3 ? au[0] + ' mfl.' : au.join(' og '),
+          title: (x.title || [])[0] || '',
+          journal: (x['container-title'] || [])[0] || x.publisher || '',
+          year: String((((x.issued || {})['date-parts'] || [[]])[0] || [])[0] || ''),
+          doi
+        };
+        const a = this.addBib([e])[0];
+        this.bibSet({ busy: false, doi: '', msg: 'La til ' + a.key, err: false });
+      })
+      .catch(() => this.bibSet({ busy: false, msg: 'Fant ikke DOI-en hos Crossref.', err: true }));
+  };
   toast(msg) {
     clearTimeout(this._tt);
     this.setState({ toast: msg });
@@ -866,6 +1082,12 @@ export default class Component extends DCLogic {
   pickerSubmit = () => {
     const p = this.state.picker,
       dec = this.state.settings.dec;
+    if (p.tab === 'math') {
+      const q = p.q.trim().toLowerCase(),
+        mm = MATH.find(x => !q || (x.n + ' ' + x.s + ' ' + x.tex).toLowerCase().includes(q));
+      if (mm) this.insertMath(mm.tex);
+      return;
+    }
     let seg, label;
     if (p.tab === 'qty') {
       const n = p.num.trim();
@@ -2033,6 +2255,29 @@ export default class Component extends DCLogic {
   };
   edPaste = e => {
     const tx = e.clipboardData && e.clipboardData.getData('text/plain');
+    if (tx && isSpice(tx)) {
+      e.preventDefault();
+      this.openPaste(tx, 'editor');
+      return;
+    }
+    if (tx && tx.includes('\t')) {
+      const a = this.findBlock(this.state.active),
+        rows = parseGrid(tx);
+      if (rows.length && rows[0].length >= 2 && (rows.length >= 2 || (a && a.type === 'table'))) {
+        e.preventDefault();
+        if (a && a.type === 'table') this.applyGrid(a.id, rows);
+        else {
+          this.addBlockAfter(
+            this.state.active,
+            { type: 'table', style: 'grid', caption: 'Tabell.', label: 'tab:' + uid().slice(0, 4), rows },
+            'Limte inn tabell fra regneark',
+            false
+          );
+          this.toast('Lagde tabell fra regnearket');
+        }
+        return;
+      }
+    }
     if (tx && /\\begin\{circuitikz\}|\\draw[\s\S]*to\s*\[/.test(tx) && !/\\begin\{(document|figure)/.test(tx)) {
       e.preventDefault();
       this.openPaste(tx, 'editor');
@@ -2099,7 +2344,7 @@ export default class Component extends DCLogic {
   }
   applyPaste = () => {
     const p = this.state.paste;
-    const r = parseCircuit(p.text);
+    const r = parseCircuit(isSpice(p.text) ? spiceToTikz(p.text) : p.text);
     if (!r.data) return this.setState({ paste: { ...p, err: r.warn.join(' '), warn: [] } });
     if (p.target === 'editor') {
       const blk = this.addBlockAfter(
@@ -2138,7 +2383,7 @@ export default class Component extends DCLogic {
     const tg = (e.target.tagName || '').toLowerCase();
     if (tg === 'input' || tg === 'textarea' || e.target.isContentEditable) return;
     const tx = e.clipboardData && e.clipboardData.getData('text/plain');
-    if (tx && /\\(draw|node|begin\{circuitikz\})/.test(tx)) {
+    if (tx && (/\\(draw|node|begin\{circuitikz\})/.test(tx) || isSpice(tx))) {
       e.preventDefault();
       this.openPaste(tx);
     }
@@ -2351,6 +2596,14 @@ export default class Component extends DCLogic {
             this.setState({ profileOpen: false });
           }
         },
+        {
+          label: 'Frakoblet modus',
+          hint: s.net.sim ? 'På' : 'Av',
+          onClick: () => {
+            this.setNet({ sim: !s.net.sim });
+            this.setState({ profileOpen: false });
+          }
+        },
         { label: 'Innstillinger', hint: MOD + ',', onClick: go(s.setTab || 'mal') },
         { label: 'Konto', hint: '', onClick: go('konto') },
         ...(me.admin ? [{ label: 'Server og backup', hint: 'Admin', onClick: go('server') }] : [])
@@ -2511,6 +2764,7 @@ export default class Component extends DCLogic {
     }
 
     const nb = numberDoc(doc.blocks);
+    const cn = citeNums(doc);
     const pres = {};
     if (this._server)
       (s.remotePresence || []).forEach(p => (pres[p.bid] = pres[p.bid] || []).push({ name: p.name, color: p.color }));
@@ -2527,7 +2781,7 @@ export default class Component extends DCLogic {
           ? `${nb.num[b.id]} ${b.text}`
           : b.type === 'p'
             ? plain(b, dec).slice(0, 54) + (plain(b, dec).length > 54 ? ' …' : '')
-            : b.type === 'fig' || b.type === 'img'
+            : b.type === 'fig' || b.type === 'img' || b.type === 'plot'
               ? `Figur ${nb.num[b.id]}: ${b.caption}`
               : b.type === 'table'
                 ? `Tabell ${nb.num[b.id]}: ${b.caption}`
@@ -2652,6 +2906,20 @@ export default class Component extends DCLogic {
                 this.openPicker('sym', { bid: b.id, si: i });
               }
             };
+          if (sg.t === 'cite') {
+            const n = cn[sg.key];
+            return {
+              isRef: true,
+              key,
+              label: n ? '[' + n + ']' : '[?]',
+              code: '\\cite{' + sg.key + '} · klikk for kilder',
+              color: n ? 'var(--k3d3a36,#3d3a36)' : 'var(--kb3261e,#b3261e)',
+              onClick: e => {
+                e.stopPropagation();
+                this.setState({ right: 'bib' });
+              }
+            };
+          }
           const L = nb.labels[sg.target];
           return {
             isRef: true,
@@ -2730,7 +2998,7 @@ export default class Component extends DCLogic {
           this.pickImage({ replace: b.id });
         };
       }
-      if (b.type === 'fig' || b.type === 'table' || b.type === 'img') {
+      if (b.type === 'fig' || b.type === 'table' || b.type === 'img' || b.type === 'plot') {
         vm.caption = b.caption || '\u200B';
         vm.rk = b.id + ':c:' + b.caption;
         vm.onCapBlur = e => this.saveField(b.id, 'caption', e.currentTarget.innerText);
@@ -2747,7 +3015,26 @@ export default class Component extends DCLogic {
         }));
         vm.onAddRow = e => {
           e.stopPropagation();
-          this.updBlock(b.id, x => ({ rows: [...x.rows, ['', '', '']] }), 'La til tabellrad');
+          this.updBlock(b.id, x => ({ rows: [...x.rows, x.rows[0].map(() => '')] }), 'La til tabellrad');
+        };
+        const nc = Math.max(1, ...b.rows.map(r => r.length));
+        vm.gridCols = 'repeat(' + nc + ',minmax(0,1fr))';
+        vm.onAddCol = e => {
+          e.stopPropagation();
+          this.updBlock(
+            b.id,
+            x => ({ rows: x.rows.map((r, i) => [...r, i === 0 ? 'Kolonne ' + (r.length + 1) : '']) }),
+            'La til kolonne'
+          );
+        };
+        vm.onDelCol = e => {
+          e.stopPropagation();
+          if (nc < 2) return;
+          this.updBlock(b.id, x => ({ rows: x.rows.map(r => r.slice(0, nc - 1)) }), 'Fjernet kolonne');
+        };
+        vm.onPasteXls = e => {
+          e.stopPropagation();
+          this.setState({ xls: { bid: b.id, text: '', err: '' } });
         };
       }
       if (b.type === 'table') {
@@ -2788,6 +3075,15 @@ export default class Component extends DCLogic {
           };
         });
         vm.addLabel = st === 'list' ? '+ punkt' : '+ rad';
+      }
+      if (b.type === 'plot') {
+        vm.isPlot = true;
+        vm.svg = plotSvg(b, { w: 520, h: b.kind === 'bode' ? 190 : 260, max: 560 });
+        vm.label = b.label;
+        vm.onEditPlot = e => {
+          e.stopPropagation();
+          this.openPlot(b);
+        };
       }
       return vm;
     });
@@ -2830,6 +3126,7 @@ export default class Component extends DCLogic {
             false
           )
       },
+      { label: '√ Formel', title: 'Formelpalett med søk', onClick: () => this.openPicker('math') },
       {
         label: '⏚ Krets',
         sep: 1,
@@ -2874,6 +3171,7 @@ export default class Component extends DCLogic {
             false
           )
       },
+      { label: '∿ Graf', title: 'Graf eller Bode-diagram fra CSV', onClick: () => this.openPlot(null) },
       {
         label: '{ } LaTeX',
         title: 'Fri LaTeX-kode (skrives ut uendret)',
@@ -2884,6 +3182,13 @@ export default class Component extends DCLogic {
         sep: 1,
         title: 'Kryssreferanse (\\cref)',
         onClick: () => this.setState(x => ({ refMenu: !x.refMenu }))
+      },
+      { label: '[1] Kilde', title: 'Kildehenvisning (\\cite)', onClick: () => this.setState({ right: 'bib' }) },
+      {
+        label: '⌕ Søk',
+        sep: 1,
+        title: 'Søk og erstatt (⌘F)',
+        onClick: () => this.setState(x => ({ find: x.find ? null : { q: '', r: '', all: false, cs: false } }))
       }
     ].map(x => ({
       ...x,
@@ -3121,7 +3426,7 @@ export default class Component extends DCLogic {
     const refs = new Set();
     doc.blocks.forEach(b => b.type === 'p' && b.segs.forEach(x => x.t === 'ref' && refs.add(x.target)));
     const unref = doc.blocks.filter(
-      b => (b.type === 'fig' || b.type === 'img' || b.type === 'table') && !refs.has(b.label)
+      b => (b.type === 'fig' || b.type === 'img' || b.type === 'table' || b.type === 'plot') && !refs.has(b.label)
     );
     const badRe = /(^|[\s(])\d+(?:[.,]\d+)?\s?[kmMµnpG]?(?:V|A|Ω|F|H|W|Hz)(?=$|[\s.,;:)])|(^|\s)U(?=$|[\s.,=])/;
     const badP = doc.blocks.filter(b => b.type === 'p' && b.segs.some(x => x.t === 'text' && badRe.test(x.v)));
@@ -3153,6 +3458,7 @@ export default class Component extends DCLogic {
     v.pagePct = Math.min(100, Math.round((pages.length / Math.max(1, S.maxPages)) * 100)) + '%';
     v.pageBarColor = pages.length > S.maxPages ? 'var(--kb3261e,#b3261e)' : 'oklch(0.62 0.14 150)';
     v.indent = S.indent ? '1.2em' : '0';
+    const pcn = citeNums(pdoc);
     const pdCtx = texCtx0();
     v.pages = pages.map((pg, pi) => ({
       outerH: pg.over ? 'auto' : '622px',
@@ -3192,7 +3498,9 @@ export default class Component extends DCLogic {
                 ? { isUnit: true, label: qtyText(x, dec) }
                 : x.t === 'sym'
                   ? { isSym: true, base: x.base, sub: x.sub }
-                  : { isRef: true, label: pn.refText(x.target) }
+                  : x.t === 'cite'
+                    ? { isRef: true, label: '[' + (pcn[x.key] || '?') + ']' }
+                    : { isRef: true, label: pn.refText(x.target) }
           );
         if (b.type === 'eq') vm.eqEl = this.texEl(b.src, false);
         if (b.type === 'raw') {
@@ -3208,6 +3516,10 @@ export default class Component extends DCLogic {
         }
         if (b.type === 'fig')
           vm.svg = b.circuit.comps.length ? drawCircuit(b.circuit, { style: S.style, dec, k: 0.42, maxH: 110 }) : null;
+        if (b.type === 'plot') {
+          vm.isFig = true;
+          vm.svg = plotSvg(b, { w: 420, h: b.kind === 'bode' ? 170 : 230, max: S.cols === 2 ? 200 : 340 });
+        }
         if (b.type === 'table') {
           const st = b.style || 'grid';
           vm.isTable = st !== 'list';
@@ -3232,10 +3544,19 @@ export default class Component extends DCLogic {
             fw: ri === 0 && st !== 'grid' ? 600 : 400,
             cells: r.map(c => ({ v: c }))
           }));
+          vm.gridCols = 'repeat(' + Math.max(1, ...b.rows.map(r => r.length)) + ',minmax(0,1fr))';
         }
         return vm;
       })
     }));
+    {
+      const bl = bibList(pdoc);
+      if (bl.length && v.pages.length)
+        v.pages[v.pages.length - 1].blocks.push(
+          { id: 'bib-h', isH1: true, num: '', text: 'Referanser' },
+          { id: 'bib-l', isTList: true, items: bl.map(x => ({ t: '[' + x.n + '] ' + x.txt })) }
+        );
+    }
     v.pageInfo = `main.pdf · ${pages.length} ${pages.length === 1 ? 'side' : 'sider'}`;
     v.downloadTex = () => {
       download(slug(doc.title) + '.tex', code.map(l => l.s).join('\n'), 'application/x-tex');
@@ -3252,9 +3573,12 @@ export default class Component extends DCLogic {
       ['PDF', 'pdf'],
       [`Kommentarer ${openC || ''}`, 'comments'],
       ...(histOk ? [['Historikk', 'history']] : []),
+      ['Kilder', 'bib'],
+      ['Sjekk', 'check'],
       [`Logg ${s.compile.nE || ''}`, 'log']
     ].map(([l, k]) => ({
       label: l.trim(),
+      k,
       onClick: () => this.setState({ right: k }),
       bg: RT === k ? 'var(--kfff,#fff)' : 'transparent',
       fw: RT === k ? 600 : 400,
@@ -3264,6 +3588,8 @@ export default class Component extends DCLogic {
     v.isCommentsTab = RT === 'comments';
     v.isHistoryTab = RT === 'history';
     v.isLogTab = RT === 'log';
+    v.isBibTab = RT === 'bib';
+    v.isCheckTab = RT === 'check';
     {
       const C = s.compile,
         lg = C.log || [];
@@ -3331,7 +3657,28 @@ export default class Component extends DCLogic {
             })),
           resolveLabel: c.resolved ? 'Gjenåpne' : 'Løs',
           opacity: c.resolved ? 0.6 : 1,
-          border: c.bid === s.active ? ACCB : 'var(--ke2dfd9,#e2dfd9)'
+          border: c.bid === s.active ? ACCB : 'var(--ke2dfd9,#e2dfd9)',
+          replies: (c.replies || []).map(r => {
+            const ru = USERS[r.by] || us;
+            return { initials: r.by, color: ru.color, name: ru.full, text: r.text, time: r.time };
+          }),
+          hasReplies: !!(c.replies && c.replies.length),
+          isReplying: !!(s.reply && s.reply.id === c.id),
+          replyText: s.reply && s.reply.id === c.id ? s.reply.text : '',
+          onReply: () =>
+            this.setState(z => ({ reply: z.reply && z.reply.id === c.id ? null : { id: c.id, text: '' } })),
+          onReplyText: e => this.setState({ reply: { id: c.id, text: e.target.value } }),
+          onSendReply: () => {
+            const tx = ((this.state.reply || {}).text || '').trim();
+            if (!tx) return;
+            const by = USERS[s.me] ? s.me : 'SK';
+            this.setState(z => ({
+              reply: null,
+              comments: z.comments.map(k =>
+                k.id === c.id ? { ...k, replies: [...(k.replies || []), { by, text: tx, time: 'nå' }] } : k
+              )
+            }));
+          }
         };
       });
     v.noComments = !v.commentList.length;
@@ -3371,8 +3718,504 @@ export default class Component extends DCLogic {
         if (!x.snap) return;
         this.setBlocks(() => clone(x.snap), `Gjenopprettet «${x.what}»`);
         this.toast('Versjon gjenopprettet');
-      }
+      },
+      diffLabel: s.diffH === x.id ? 'Skjul' : 'Sammenlign',
+      onDiff: () => this.setState(z => ({ diffH: z.diffH === x.id ? null : x.id }))
     }));
+    {
+      const h = s.history.find(x => x.id === s.diffH);
+      v.diffOpen = !!(h && h.snap);
+      v.df = { rows: [] };
+      if (v.diffOpen) {
+        const old = h.snap,
+          om = {},
+          cm = new Set(doc.blocks.map(b => b.id)),
+          rows = [];
+        old.forEach(b => (om[b.id] = b));
+        const squash = ps =>
+          ps.map((p, i) => {
+            if (p.k !== 'eq') return p;
+            const w = p.t.split(/(\s+)/);
+            if (w.length <= 30) return p;
+            return {
+              ...p,
+              t: (i === 0 ? '' : w.slice(0, 12).join('')) + ' … ' + (i === ps.length - 1 ? '' : w.slice(-12).join(''))
+            };
+          });
+        const sty = k =>
+          k === 'add'
+            ? { bg: 'oklch(0.93 0.07 150)', color: '#17532c', td: 'none' }
+            : k === 'del'
+              ? { bg: 'oklch(0.94 0.04 25)', color: '#8f1d17', td: 'line-through' }
+              : { bg: 'transparent', color: 'inherit', td: 'none' };
+        doc.blocks.forEach(b => {
+          const o = om[b.id],
+            tn = blockTxt(b, dec);
+          if (!o) rows.push({ tag: 'Ny', tk: 'add', b, parts: [{ t: tn || '(tom blokk)', k: 'add' }] });
+          else {
+            const to = blockTxt(o, dec);
+            if (to !== tn) rows.push({ tag: 'Endret', tk: 'chg', b, parts: squash(wdiff(to, tn)) });
+          }
+        });
+        old.forEach(o => {
+          if (!cm.has(o.id))
+            rows.push({ tag: 'Slettet', tk: 'del', o, parts: [{ t: blockTxt(o, dec) || '(tom blokk)', k: 'del' }] });
+        });
+        v.df = {
+          title: 'Endringer siden «' + h.what + '»',
+          sub: h.who + ' · ' + h.time + ' · ' + rows.length + (rows.length === 1 ? ' blokk' : ' blokker'),
+          none: !rows.length,
+          onClose: () => this.setState({ diffH: null }),
+          onRestore: () => {
+            this.setBlocks(() => clone(old), `Gjenopprettet «${h.what}»`);
+            this.setState({ diffH: null });
+            this.toast('Versjon gjenopprettet');
+          },
+          rows: rows.map(r => ({
+            tag: r.tag,
+            where: (summary(r.b || r.o) || KIND[(r.b || r.o).type] || '').slice(0, 60),
+            tagBg:
+              r.tk === 'add' ? 'oklch(0.93 0.07 150)' : r.tk === 'del' ? 'oklch(0.94 0.04 25)' : 'oklch(0.94 0.05 85)',
+            tagColor: r.tk === 'add' ? '#17532c' : r.tk === 'del' ? '#8f1d17' : '#5a4210',
+            onClick: () => r.b && this.focusBlock(r.b.id, 'history'),
+            parts: r.parts.map(p => ({ t: p.t, ...sty(p.k) }))
+          }))
+        };
+      }
+    }
+    {
+      const bu = s.bibUi,
+        uses = {};
+      doc.blocks.forEach(
+        b =>
+          b.type === 'p' &&
+          b.segs.forEach(x => {
+            if (x.t === 'cite') uses[x.key] = (uses[x.key] || 0) + 1;
+          })
+      );
+      v.bb = {
+        doi: bu.doi,
+        onDoi: e => this.bibSet({ doi: e.target.value, msg: '' }),
+        onDoiKey: e => {
+          if (e.key === 'Enter') this.lookupDoi();
+        },
+        onLookup: this.lookupDoi,
+        lookLabel: bu.busy ? 'Henter …' : 'Hent',
+        msg: bu.msg || '',
+        msgColor: bu.err ? 'var(--kb3261e,#b3261e)' : 'var(--k4d8a5a,#4d8a5a)',
+        showBibtex: !!bu.showBib,
+        bibtexLabel: bu.showBib ? 'Skjul BibTeX' : 'Lim inn BibTeX',
+        toggleBibtex: () => this.bibSet({ showBib: !bu.showBib }),
+        bibtex: bu.bibtex,
+        onBibtex: e => this.bibSet({ bibtex: e.target.value }),
+        onImport: () => {
+          const es = parseBibtex(bu.bibtex);
+          if (!es.length) return this.bibSet({ msg: 'Fant ingen @-oppføringer.', err: true });
+          this.addBib(es);
+          this.bibSet({ bibtex: '', showBib: false, msg: 'Importerte ' + es.length, err: false });
+        },
+        onExport: () => {
+          if (!(doc.bib || []).length) return this.toast('Ingen kilder å eksportere');
+          download('refs.bib', toBibtex(doc.bib), 'application/x-bibtex');
+          this.toast('refs.bib lastet ned');
+        },
+        items: bibList(doc).map(e => ({
+          n: e.n,
+          txt: e.txt,
+          key: e.key,
+          uses: uses[e.key] ? 'sitert ' + uses[e.key] + '×' : 'ikke sitert ennå',
+          onCite: () => this.insertSeg(citeSeg(e.key), 'Satt inn kilde [' + e.n + ']'),
+          onDel: () =>
+            this.setDoc(
+              d => ({
+                ...d,
+                bib: (d.bib || []).filter(x => x.key !== e.key),
+                blocks: d.blocks.map(b =>
+                  b.type === 'p' && b.segs.some(x => x.t === 'cite' && x.key === e.key)
+                    ? { ...b, segs: norm(b.segs.filter(x => !(x.t === 'cite' && x.key === e.key))) }
+                    : b
+                )
+              }),
+              'Fjernet kilde ' + e.key
+            )
+        }))
+      };
+      v.bb.empty = !v.bb.items.length;
+    }
+    {
+      const lang = S.lang || 'nb',
+        D = lang === 'en' ? SPELL_EN : SPELL_NB,
+        ign = new Set(s.ignored || []),
+        items = [];
+      doc.blocks.forEach(b =>
+        textFields(b).forEach(f => {
+          if (f.k === 'src') return;
+          const v0 = f.v;
+          let m;
+          const wre = /[A-Za-zÆØÅæøåéü]+/g;
+          while ((m = wre.exec(v0))) {
+            const w = m[0],
+              fix = this._server ? this._server.spellFix(w, lang) : D[w.toLowerCase()];
+            if (fix) {
+              const rep = w[0] !== w[0].toLowerCase() ? fix[0].toUpperCase() + fix.slice(1) : fix;
+              items.push({
+                kind: 'Stavefeil',
+                b,
+                f,
+                at: m.index,
+                len: w.length,
+                rep,
+                fixLabel: 'Bytt til «' + rep + '»'
+              });
+            }
+          }
+          const dre = /(^|[^A-Za-zÆØÅæøå])([A-Za-zÆØÅæøå]{2,})\s+\2(?![A-Za-zÆØÅæøå])/gi;
+          while ((m = dre.exec(v0))) {
+            const at = m.index + m[1].length;
+            items.push({
+              kind: 'Dobbelt ord',
+              b,
+              f,
+              at,
+              len: m[0].length - m[1].length,
+              rep: m[2],
+              fixLabel: 'Fjern det ene «' + m[2] + '»'
+            });
+          }
+          if (b.type === 'p' && f.k[0] === 's') {
+            const ure = /(\d+(?:[.,]\d+)?)\s?([kMmµunpG]?)(Ω|ohm|Hz|V|A|F|H|W)(?=$|[\s.,;:)])/g;
+            while ((m = ure.exec(v0))) {
+              const pre = m[2] === 'µ' ? 'u' : m[2];
+              if (!PFX.some(x => x.k === pre)) continue;
+              items.push({
+                kind: 'Enhet',
+                b,
+                f,
+                at: m.index,
+                len: m[0].length,
+                si: +f.k.slice(1),
+                unit: { num: m[1].replace('.', ','), prefix: pre, unit: m[3] === 'Ω' || m[3] === 'ohm' ? 'ohm' : m[3] },
+                fixLabel: 'Gjør om til \\qty'
+              });
+            }
+          }
+        })
+      );
+      const key = it => it.kind + '|' + it.b.id + '|' + it.f.k + '|' + it.at,
+        list = items.filter(it => !ign.has(key(it)));
+      const fixOne = it => {
+        if (it.unit)
+          this.updBlock(
+            it.b.id,
+            x => {
+              const sg = x.segs[it.si];
+              if (!sg || sg.t !== 'text') return {};
+              const segs = [...x.segs];
+              segs.splice(
+                it.si,
+                1,
+                { t: 'text', v: sg.v.slice(0, it.at) },
+                { t: 'unit', ...it.unit },
+                { t: 'text', v: sg.v.slice(it.at + it.len) }
+              );
+              return { segs: norm(segs) };
+            },
+            'Gjorde om til \\qty'
+          );
+        else
+          this.setBlocks(
+            bs =>
+              bs.map(x => {
+                if (x.id !== it.b.id) return x;
+                const F = textFields(x).find(q => q.k === it.f.k);
+                return F ? F.set(x, F.v.slice(0, it.at) + it.rep + F.v.slice(it.at + it.len)) : x;
+              }),
+            'Rettet «' + it.rep + '»'
+          );
+      };
+      const fixAll = () => {
+        const sp = list.filter(it => !it.unit);
+        if (!sp.length) return;
+        this.setBlocks(
+          bs =>
+            bs.map(x => {
+              const mine = sp.filter(it => it.b.id === x.id);
+              if (!mine.length) return x;
+              let y = x;
+              const byF = {};
+              mine.forEach(it => (byF[it.f.k] = byF[it.f.k] || []).push(it));
+              Object.keys(byF).forEach(k => {
+                const F = textFields(y).find(q => q.k === k);
+                if (!F) return;
+                let val = F.v;
+                byF[k]
+                  .sort((a, c) => c.at - a.at)
+                  .forEach(it => {
+                    val = val.slice(0, it.at) + it.rep + val.slice(it.at + it.len);
+                  });
+                y = F.set(y, val);
+              });
+              return y;
+            }),
+          'Rettet ' + sp.length + ' funn'
+        );
+        this.toast('Rettet ' + sp.length + ' funn');
+      };
+      const CC = {
+        Stavefeil: ['oklch(0.94 0.04 25)', '#8f1d17'],
+        'Dobbelt ord': ['oklch(0.94 0.05 85)', '#5a4210'],
+        Enhet: ['oklch(0.94 0.03 250)', '#24457a']
+      };
+      v.ck = {
+        head: list.length ? list.length + ' funn i dokumentet' : 'Alt ser bra ut',
+        empty: !list.length,
+        canFixAll: list.some(it => !it.unit),
+        onFixAll: fixAll,
+        langs: [
+          ['Bokmål', 'nb'],
+          ['English', 'en']
+        ].map(([l, k]) => ({
+          label: l,
+          onClick: () => this.setS('lang', k),
+          bg: lang === k ? 'var(--kfff,#fff)' : 'transparent',
+          shadow: lang === k ? '0 1px 2px rgba(0,0,0,.1)' : 'none'
+        })),
+        items: list.slice(0, 80).map(it => {
+          const v0 = it.f.v;
+          return {
+            kind: it.kind,
+            badgeBg: CC[it.kind][0],
+            badgeColor: CC[it.kind][1],
+            where: (summary(it.b) || '').slice(0, 50),
+            onGo: () => this.focusBlock(it.b.id, 'outline'),
+            before: (it.at > 40 ? '… ' : '') + v0.slice(Math.max(0, it.at - 40), it.at),
+            hit: v0.substr(it.at, it.len),
+            after: v0.slice(it.at + it.len, it.at + it.len + 40) + (v0.length > it.at + it.len + 40 ? ' …' : ''),
+            fixLabel: it.fixLabel,
+            onFix: () => fixOne(it),
+            onIgnore: () => this.setState(z => ({ ignored: [...(z.ignored || []), key(it)] }))
+          };
+        })
+      };
+      v.spellLang = lang === 'en' ? 'en' : 'nb';
+      v.rightTabs.forEach(tb => {
+        if (tb.k === 'check' && list.length) tb.label = 'Sjekk ' + list.length;
+        if (tb.k === 'bib' && (doc.bib || []).length) tb.label = 'Kilder ' + doc.bib.length;
+      });
+    }
+    {
+      const F = s.find;
+      v.findOpen = !!F && s.view === 'editor';
+      v.fd = { results: [], scopes: [] };
+      if (F) {
+        const q = F.q;
+        let re = null;
+        try {
+          re = q ? new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g' + (F.cs ? '' : 'i')) : null;
+        } catch (e) {}
+        const scope = F.all ? s.docs : [doc],
+          res = [];
+        let total = 0;
+        if (re)
+          scope.forEach(d =>
+            d.blocks.forEach(b =>
+              textFields(b).forEach(f => {
+                re.lastIndex = 0;
+                let m,
+                  first = null,
+                  n = 0;
+                while ((m = re.exec(f.v))) {
+                  n++;
+                  if (!first) first = m;
+                }
+                if (n) {
+                  total += n;
+                  const a = first.index;
+                  res.push({
+                    d,
+                    b,
+                    n,
+                    before: (a > 30 ? '…' : '') + f.v.slice(Math.max(0, a - 30), a),
+                    hit: first[0],
+                    after: f.v.slice(a + first[0].length, a + first[0].length + 60)
+                  });
+                }
+              })
+            )
+          );
+        const rep = pred => {
+          let cnt = 0;
+          const mk = () => new RegExp(re.source, re.flags),
+            tf = b => {
+              let y = b;
+              textFields(b).forEach(f => {
+                const c = (f.v.match(mk()) || []).length;
+                if (!c) return;
+                cnt += c;
+                const G = textFields(y).find(z => z.k === f.k);
+                if (G)
+                  y = G.set(
+                    y,
+                    f.v.replace(mk(), () => F.r)
+                  );
+              });
+              return y;
+            };
+          this.pushUndo('doc', this.snapDoc(this.curDoc()), true);
+          this.setState(
+            z => ({
+              docs: z.docs.map(d =>
+                scope.some(x => x.id === d.id) ? { ...d, blocks: d.blocks.map(b => (pred(d, b) ? tf(b) : b)) } : d
+              )
+            }),
+            () => {
+              this.schedule();
+              this.toast(cnt ? 'Erstattet ' + cnt + (cnt === 1 ? ' forekomst' : ' forekomster') : 'Ingen treff');
+            }
+          );
+        };
+        v.fd = {
+          q: F.q,
+          r: F.r,
+          onQ: e => this.setState({ find: { ...this.state.find, q: e.target.value } }),
+          onR: e => this.setState({ find: { ...this.state.find, r: e.target.value } }),
+          onKey: e => {
+            if (e.key === 'Enter' && res[0]) this.gotoHit(res[0].d.id, res[0].b.id);
+          },
+          caseBg: F.cs ? ACCL : 'var(--kfff,#fff)',
+          caseBorder: F.cs ? ACCB : 'var(--ke2dfd9,#e2dfd9)',
+          onCase: () => this.setState({ find: { ...F, cs: !F.cs } }),
+          scopes: [
+            ['Dette dokumentet', false],
+            ['Alle prosjekter', true]
+          ].map(([l, a]) => ({
+            label: l,
+            onClick: () => this.setState({ find: { ...F, all: a } }),
+            bg: !!F.all === a ? 'var(--kfff,#fff)' : 'transparent',
+            shadow: !!F.all === a ? '0 1px 2px rgba(0,0,0,.1)' : 'none'
+          })),
+          count: !q
+            ? ''
+            : total
+              ? total + ' treff' + (F.all ? ' i ' + new Set(res.map(r => r.d.id)).size + ' dok.' : '')
+              : 'Ingen treff',
+          onReplaceAll: () => {
+            if (re && total) rep(() => true);
+          },
+          hasResults: res.length > 0,
+          onClose: () => this.setState({ find: null }),
+          results: res.slice(0, 60).map(r => ({
+            where: (F.all ? r.d.title + ' · ' : '') + (summary(r.b) || '').slice(0, 40),
+            before: r.before,
+            hit: r.hit,
+            after: r.after,
+            onClick: () => this.gotoHit(r.d.id, r.b.id),
+            onReplace: e => {
+              e.stopPropagation();
+              rep((d, b) => d.id === r.d.id && b.id === r.b.id);
+            }
+          }))
+        };
+      }
+    }
+    {
+      const n = s.net,
+        off = !n.on || n.sim;
+      v.netShow = off || n.syncing;
+      v.netText = n.syncing
+        ? 'Synkroniserer …'
+        : 'Frakoblet' + (n.queue ? ' · ' + n.queue + (n.queue === 1 ? ' endring' : ' endringer') + ' venter' : '');
+      v.netColor = n.syncing ? 'oklch(0.45 0.15 250)' : '#6b4a1a';
+      v.netBg = n.syncing ? 'oklch(0.95 0.03 250)' : 'oklch(0.95 0.04 80)';
+      v.netTitle = n.sim
+        ? 'Simulert frakobling. Klikk for å koble til igjen.'
+        : 'Ingen nettforbindelse. Alt lagres lokalt og kompileres på maskinen.';
+      v.netClick = () => {
+        if (this.state.net.sim) this.setNet({ sim: false });
+      };
+    }
+    {
+      const p = s.plot;
+      v.plotOpen = !!p;
+      v.closePlot = () => this.setState({ plot: null });
+      v.csvRef = this.csvRef;
+      v.pl = { kinds: [] };
+      if (p) {
+        const d = parseCSV(p.csv);
+        v.pl = {
+          title: p.bid ? 'Rediger graf' : 'Ny graf fra data',
+          csv: p.csv,
+          onCsv: e => this.plotSet({ csv: e.target.value }),
+          xlabel: p.xlabel,
+          ylabel: p.ylabel,
+          caption: p.caption,
+          onX: e => this.plotSet({ xlabel: e.target.value }),
+          onY: e => this.plotSet({ ylabel: e.target.value }),
+          onCap: e => this.plotSet({ caption: e.target.value }),
+          kinds: [
+            ['Linjediagram', 'line'],
+            ['Bode-diagram', 'bode']
+          ].map(([l, k]) => ({
+            label: l,
+            onClick: () => this.plotSet({ kind: k }),
+            bg: p.kind === k ? 'var(--kfff,#fff)' : 'transparent',
+            shadow: p.kind === k ? '0 1px 2px rgba(0,0,0,.1)' : 'none',
+            fw: p.kind === k ? 600 : 400
+          })),
+          onSample: () => this.plotSet(this.plotSample(p.kind)),
+          onFile: () => this.csvRef.current && this.csvRef.current.click(),
+          onFilePick: e => {
+            const f = e.target.files && e.target.files[0];
+            e.target.value = '';
+            if (!f) return;
+            const r = new FileReader();
+            r.onload = () => this.plotSet({ csv: String(r.result) });
+            r.readAsText(f);
+          },
+          svg:
+            d.rows.length >= 2
+              ? plotSvg(p, { w: 460, h: p.kind === 'bode' && d.head.length >= 3 ? 170 : 270, max: 520 })
+              : 'Lim inn data for å se grafen',
+          info: d.rows.length
+            ? d.rows.length +
+              ' punkter · ' +
+              Math.max(0, d.head.length - 1) +
+              (d.head.length === 2 ? ' serie' : ' serier') +
+              ' · ' +
+              d.head.join(', ')
+            : 'Forhåndsvisning',
+          note:
+            p.kind === 'bode'
+              ? 'Første kolonne er frekvens og får logaritmisk akse. Andre kolonne er forsterkning; en tredje kolonne med fase tegnes i et eget panel under.'
+              : 'Første kolonne er x. Hver av de neste kolonnene blir en egen kurve. Skilletegn kan være semikolon, komma eller tab.',
+          err: p.err,
+          onSubmit: () => this.submitPlot(),
+          submitLabel: p.bid ? 'Oppdater' : 'Sett inn'
+        };
+      }
+    }
+    {
+      const x = s.xls;
+      v.xlsOpen = !!x;
+      v.closeXls = () => this.setState({ xls: null });
+      v.xl = {};
+      if (x) {
+        const g = x.text.trim() ? parseGrid(x.text) : [];
+        v.xl = {
+          text: x.text,
+          onText: e => this.setState({ xls: { ...x, text: e.target.value, err: '' } }),
+          err: x.err,
+          info: g.length
+            ? g.length + ' rader × ' + g[0].length + ' kolonner. Første rad blir overskrift.'
+            : 'Kopier cellene i Excel, Numbers eller Google Sheets og lim dem inn her. Du kan også trykke ⌘V rett i tabellen.',
+          onSubmit: () => {
+            if (!g.length) return this.setState({ xls: { ...x, err: 'Ingenting å lime inn.' } });
+            this.setState({ xls: null });
+            this.applyGrid(x.bid, g);
+          }
+        };
+      }
+    }
 
     v.shareOpen = s.share;
     v.shareTop = 58;
@@ -3580,9 +4423,23 @@ export default class Component extends DCLogic {
         },
         isQty: p.tab === 'qty',
         isSym: p.tab === 'sym',
+        isMath: p.tab === 'math',
+        maths: MATH.filter(x => mt({ n: x.n, s: x.s, c: x.tex })).map(x => ({
+          s: x.s,
+          n: x.n,
+          code: x.tex,
+          onClick: () => this.insertMath(x.tex)
+        })),
+        mathHint: (() => {
+          const a = this.findBlock(s.active);
+          return a && a.type === 'eq'
+            ? 'Klikk for å legge til i den valgte likningen.'
+            : 'Klikk for å lage en ny likning med symbolet.';
+        })(),
         tabs: [
           ['Verdi med enhet', 'qty'],
-          ['Størrelser og symboler', 'sym']
+          ['Størrelser og symboler', 'sym'],
+          ['Formler', 'math']
         ].map(([l, k]) => ({
           label: l,
           onClick: () => this.pk({ tab: k, err: '' }),
@@ -3626,7 +4483,7 @@ export default class Component extends DCLogic {
         onSubmit: this.pickerSubmit,
         submitLabel: p.edit ? 'Oppdater' : 'Sett inn'
       };
-    } else v.pk = { tabs: [], prefixes: [], units: [], syms: [] };
+    } else v.pk = { maths: [], tabs: [], prefixes: [], units: [], syms: [] };
 
     v.groups = GROUPS.map(g => ({
       label: g,
@@ -3663,7 +4520,7 @@ export default class Component extends DCLogic {
             else if (b.type === 'p') {
               const tx = plain(b, dec);
               if (tx.trim()) out.push({ isP: true, t: tx });
-            } else if (b.type === 'fig' || b.type === 'img')
+            } else if (b.type === 'fig' || b.type === 'img' || b.type === 'plot')
               out.push({ isBox: true, h: '16cqw', t: 'Figur ' + nb2.num[b.id] });
             else if (b.type === 'table')
               out.push({

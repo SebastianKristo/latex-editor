@@ -1,0 +1,22 @@
+{
+  "name": "@kobling/mobile",
+  "private": true,
+  "version": "0.3.0",
+  "type": "module",
+  "scripts": {
+    "build:web": "pnpm --filter @kobling/web build",
+    "sync": "cap sync",
+    "android": "cap sync android && cd android && ./gradlew assembleDebug",
+    "ios": "cap sync ios && cap open ios"
+  },
+  "dependencies": {
+    "@capacitor/android": "8.5.3",
+    "@capacitor/camera": "8.2.6",
+    "@capacitor/core": "8.5.3",
+    "@capacitor/ios": "8.5.3",
+    "@capacitor/keyboard": "8.0.6"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "8.5.3"
+  }
+}

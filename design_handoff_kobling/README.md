@@ -131,6 +131,7 @@ Ingen bilder eller ikoner utover tekstglyfer (§ ¶ Ω α ∑ ⏚ ▣ ▦ ↗ �
 
 ## Files
 - `prototype/Kobling App v2.dc.html` – **gjeldende prototype** (design 1a + alle funksjoner). Åpnes direkte i nettleser (trenger `support.js` i samme mappe).
+- `prototype/Kobling Mobil.dc.html` – mobil og nettbrett: klikkbare prototyper + alle skjermer (bruker `Kobling Mobil App.dc.html`, `ios-frame.jsx`, `android-frame.jsx`).
 - `prototype/Kobling App.dc.html` – forrige visuelle versjon (samme funksjoner, varm palett). Kun referanse.
 - `prototype/Kobling Redesign.dc.html` – de tre retningene 1a/1b/1c. Valgt: **1a**, men med «SETT INN»-baren fra eksisterende editor (ikke den flytende pillen).
 - `prototype/Kobling.dc.html` – tidlig utforskning (to visuelle retninger, kun referanse).
@@ -142,7 +143,7 @@ Ingen bilder eller ikoner utover tekstglyfer (§ ¶ Ω α ∑ ⏚ ▣ ▦ ↗ �
 Lim inn denne i Claude Code i en tom mappe der `design_handoff_kobling/` ligger:
 
 ```
-Les design_handoff_kobling/README.md fra start til slutt, også «Oppdateringer etter første handoff». Åpne prototype/Kobling App v2.dc.html i nettleseren og klikk gjennom alt. Den er fasiten for utseende og oppførsel. All UI-tekst skal være ordrett som i prototypen (norsk bokmål).
+Les design_handoff_kobling/README.md fra start til slutt, også «Oppdateringer etter første handoff» (punkt 1–12). Åpne prototype/Kobling App v2.dc.html og prototype/Kobling Mobil.dc.html i nettleseren og klikk gjennom alt. Den er fasiten for utseende og oppførsel. All UI-tekst skal være ordrett som i prototypen (norsk bokmål).
 
 Bygg Kobling fra bunnen av som et ekte produkt. Gå i denne rekkefølgen, og stopp etter hvert steg for å vise meg resultatet:
 
@@ -165,7 +166,11 @@ Bygg Kobling fra bunnen av som et ekte produkt. Gå i denne rekkefølgen, og sto
    - admin-API-er (403 for ikke-admin, også for historikk når den er slått av)
    - DuckDNS og SMB-backup
 
-6. Docker-image og deploy/: bruk deploy/generators.js som den er. Tauri-apper for macOS og Windows.
+6. Funksjonene i README punkt 11: versjonsdiff, svar på kommentarer, nye maler, Kilder (Crossref/BibTeX, \cite), plot-blokk (CSV, Bode, pgfplots), tabeller med vilkårlig antall kolonner + Excel-innliming, SPICE → circuitikz, Formler-fane, søk og erstatt (⌘F), Sjekk-fane (Hunspell nb/en), offline med y-indexeddb. Flytt også parseCSV, plotLines, plotSvg, wdiff, textFields, parseBibtex, toBibtex, citeNums, isSpice og spiceToTikz til packages/core med tester.
+
+7. apps/mobile (Capacitor) etter README punkt 12 og prototype/Kobling Mobil.dc.html: telefon (iOS og Android) og nettbrett, kamera til figur, bunnark, verktøylinje over tastaturet.
+
+8. Docker-image og deploy/: bruk deploy/generators.js som den er. Tauri-apper for macOS og Windows.
 
 Kjør tester og typesjekk etter hvert steg. Når noe er uklart, er prototypen fasit. Spør meg bare hvis prototypen og README sier forskjellige ting.
 ```
@@ -270,3 +275,45 @@ Den visuelle editoren kan ikke tegne TikZ selv. Prototypen viser derfor en stipl
 - **Komponentpalett** følger tema (lyse streker i mørk modus).
 - **Prosjektkort** viser ekte miniside (tittel, forfattere, overskrifter, tekst, bokser for figur/tabell/likning) i hvitt papir, skalert med container queries (`cqw`).
 - **Gi filer nytt navn:** dobbeltklikk eller blyant. Bilder: `\includegraphics` oppdateres. Kretser: label `fig:…` og alle referanser oppdateres. Validering av tegn og duplikater.
+
+
+## 11. Nye skrivefunksjoner (alle i `Kobling App v2.dc.html`)
+Høyrepanelets faner er nå **PDF | Kommentarer n | Historikk | Kilder n | Sjekk n | Logg n**. Fanerad og PDF-verktøy brytes til to linjer når panelet er smalt (`flex-wrap`).
+
+- **Versjonshistorikk med diff:** hver rad i Historikk har «Sammenlign». Panel øverst: «Endringer siden «…»», antall blokker, «Gjenopprett denne», ×. Hver endret blokk vises med merke **Ny** (grønn `oklch(0.93 0.07 150)` / `#17532c`), **Endret** (gul `oklch(0.94 0.05 85)` / `#5a4210`) eller **Slettet** (rød `oklch(0.94 0.04 25)` / `#8f1d17`), og ord-for-ord-diff (`wdiff`, LCS på ord; lange like strekk forkortes med «…»). Klikk = gå til blokken. Tekst per blokk: `blockTxt`.
+- **Kommentarer med svar:** «Svar» ved siden av «Løs» åpner tekstfelt. `comment.replies[] {by, text, time}` vises innrykket med grå venstrekant.
+- **Malbibliotek:** nye maler **Øvingsoppgaver** (Oppgave 1 a), b) …) og **Forarbeid til lab** (Teori, Beregninger med likning, Simulering, Plan for labdagen + utstyrsliste). Se `TPLS` og `skeleton`.
+- **Kildehåndtering (fane Kilder):** felt for DOI eller lenke + «Hent» → Crossref (`https://api.crossref.org/works/<doi>`) → oppføring `{type, key, author, title, journal, year, doi, url}`. Nøkkel = etternavn + år, med a/b/c ved kollisjon (`bibKey`). «Lim inn BibTeX» (`parseBibtex`), «Last ned refs.bib» (`toBibtex`). Hver kilde: [n], tekst, nøkkel, «sitert n× / ikke sitert ennå», «Sett inn \cite», «Fjern» (fjerner også sitater). Nytt inline-segment `cite{key}` vises som grå brikke «[n]». Nummerering etter første sitat (`citeNums`). LaTeX: `\cite{key}` + `thebibliography` før `\end{document}`. PDF: «Referanser» med [n]-liste sist. I produktet: vurder biblatex + refs.bib på serveren. Behold samme UI. Offline: «Frakoblet. DOI-oppslag krever nett.»
+- **Graf fra CSV (blokk `plot`):** knapp «∿ Graf» i SETT INN. Dialog 940 px: Linjediagram | Bode-diagram, tekstfelt for data (skilletegn `;` `,` eller tab, desimalkomma tillatt, første rad er overskrift hvis den ikke er tall: `parseCSV`), «Velg fil», «Eksempeldata», x-/y-akse, figurtekst, live forhåndsvisning (`plotSvg`). Bode: logaritmisk x-akse med dekader, kolonne 2 = forsterkning, kolonne 3 = fase i eget panel under. Blokk `{type:'plot', csv, kind, xlabel, ylabel, caption, label}` nummereres som figur. LaTeX (`plotLines`): `figure` + `tikzpicture` + `axis` (`xmode=log` for Bode, to akser med `name=mag` / `at={(mag.below south west)}`), maks 150 punkter.
+- **Tabeller:** vilkårlig antall kolonner (`gridCols`, `tabular`-spesifikasjon bygges fra antall). Verktøy når aktiv: «+ kolonne», «− kolonne», «Lim inn fra Excel» (dialog). ⌘V med tab-separerte celler i en aktiv tabell erstatter innholdet. Med ≥ 2 rader utenfor tabell lages en ny tabell (`parseGrid`).
+- **SPICE → circuitikz:** lim inn en netliste (`R1 1 2 220`, `V1 1 0 DC 9`, `C1 2 0 100n` …) i kretsen eller editoren. `isSpice` krever ≥ 2 elementlinjer og node 0/gnd. `spiceToTikz` lager `\draw`-linjer (noder i kolonner med 3 enheters avstand, jord nederst, parallelle løftes 2 opp, verdier → `\qty` med SPICE-prefiks p n u m k meg g), deretter vanlig `parseCircuit` + autoplassering. Dialogtittel: «Lim inn CircuiTikZ eller SPICE».
+- **Formelpalett:** ny fane **Formler** i velgeren (⌘E) og knapp «√ Formel». 40 symboler med søk (`MATH`). Klikk legger til i valgt likning, eller lager ny likning. Enter = første treff.
+- **Søk og erstatt (⌘F eller «⌕ Søk»):** linje under SETT INN med Søk, Erstatt med, Aa (skill store/små), «Dette dokumentet | Alle prosjekter», antall treff, «Erstatt alle», ×. Treffliste (maks 60) med sted, utdrag og gul markering `oklch(0.9 0.12 95)`, klikk = gå til, «Erstatt» per treff. Søker i overskrifter, avsnitt, sammendrag, figurtekster, tabellceller, likninger og LaTeX-blokker (`textFields`). Erstatt-alle er ett angre-steg.
+- **Sjekk-fanen (stavekontroll):** Bokmål | English. Funn: **Stavefeil** (ordliste `SPELL_NB` / `SPELL_EN`), **Dobbelt ord**, **Enhet** (tall + enhet skrevet som tekst, f.eks. «330 Ω» → `\qty`-brikke). Hver: utdrag med bølgestrek, «Bytt til «…»» / «Gjør om til \qty», «Ignorer». «Rett alle» for stavefeil/doble ord. Editoren har `lang="nb|en"` + `spellcheck` så OS-ets stavekontroll også virker. **I produktet:** bytt ordlisten med Hunspell (nb_NO / en_US) i en Web Worker, og behold samme UI og funntyper.
+- **Offline-modus:** lytter på `online/offline`. Profilmenyen har «Frakoblet modus» (simulering/testing). Pille i topplinjen før kompileringsstatus: «Frakoblet · n endringer venter» (`oklch(0.95 0.04 80)` / `#6b4a1a`) og «Synkroniserer …» (blå) i 1,4 s ved gjenkobling, så toast «Synkronisert · n endringer lastet opp». Endringer telles i vinduer på 1,5 s. **I produktet:** Yjs + y-indexeddb lagrer lokalt, og latexmk-WASM (f.eks. SwiftLaTeX/busytex) eller lintTex-forhåndsvisning brukes uten nett. Synk ved gjenkobling.
+
+## 12. Mobil og nettbrett (`Kobling Mobil.dc.html` + `Kobling Mobil App.dc.html`)
+Én komponent (`Kobling Mobil App`) med props `device: ios | android | tablet`, `screen: projects | doc | circuit | camera`, `seg: write | code | pdf`, `sheet: comments | log | share | insert`, `keyboard`, `camStep: shoot | review`, `offline`. Lerretsfila viser klikkbar iPhone (1a), Android (1b), iPad liggende (1c), og 11 skjermer per plattform (i1–i11, a1–a11). Rammer: `ios-frame.jsx` (402×874, statuslinje over innholdet, 54 px topp) og `android-frame.jsx` (412×892). iPad: 1180×820, kant 14 px `#1b1b1d`, radius 38.
+
+**Teknologi:** samme kodebase som web: `apps/mobile` med **Capacitor** (eller Tauri 2 mobile) rundt `packages/ui`, med egne mobil-layouter under 700 px bredde. Kamera via `@capacitor/camera`. Bilder komprimeres til maks 1600 px som på desktop.
+
+Felles: bakgrunn `#eceef2`, kort `#fff` radius 16, font Geist / Geist Mono / STIX Two Text, aksent `oklch(0.55 0.17 255)`, alle trykkflater ≥ 44 px (knapper 36–50 px høye i verktøylinjer, med luft rundt).
+
+- **Prosjekter:** iOS: stor tittel «Prosjekter» 34/700, runde knapper (Synkronisert/Frakoblet, +, avatar), søkefelt 40 px radius 12 `#e1e3e8`. Android: toppfelt 52 px med «K»-logo, tittel 22/500, søkefelt 56 px radius 28 `#e8e6ee`, FAB «+ Ny oblig» 56 px radius 16 `oklch(0.88 0.06 255)`. Gruppebrikker (valgt = svart). Kort: miniside 62×86 + tittel 16/600 + meta 13 + statusprikk (Kompilert grønn `#2f7a46`, 1 feil rød `#b3261e`, «Lagret på enheten» grå). Rutenett `repeat(auto-fill,minmax(300px,1fr))` gir 1 kolonne på telefon og flere på nettbrett.
+- **Dokument, topplinje:** tilbake (iOS ‹ i rund knapp / Android ←), tittel 16/600 + «ADK 61 · main.tex», kompileringspille (åpner Logg-arket), gul kommentarboble med antall (åpner Kommentarer), «Del» (åpner Deling). Telefon: segmentkontroll **Skriv | Kode | PDF** under (iOS grå segment / Android M3 utlinjet med ✓). Nettbrett: **Skriv | Kode** i topplinjen, og PDF alltid til høyre.
+- **Skriv:** samme blokker som desktop (brikker for enheter, [n]-kilder, nummererte overskrifter, likning med (1), figur med «Rediger krets», tabell). Samarbeidsmarkering «Mia». Trykk i teksten viser tastatur + **verktøylinje over tastaturet**: blå «+» (Sett inn-ark), rullbar rad Ω Enhet · α Symbol · √ Formel · ⏚ Krets · ◉ Kamera · ▦ Tabell · ∿ Graf · [1] Kilde, «Ferdig» skjuler tastaturet.
+- **Kode:** mono 12,5/1,75, linjenumre, feillinje rød bakgrunn + melding under («✕ Undefined control sequence \ohms»), advarsel oransje. Tastaturrad: \ { } $ _ ^ & % ~ [ ].
+- **PDF:** grå bakgrunn `#e6e3dd`, A4-sider maks 400 px, kommentarnåler (gule, klikkbare), pille «Side 1 av 2 · knip for å zoome». Knip-zoom i produktet.
+- **Ark (bunnark, maks 560 px bredt, radius 24 øverst, håndtak 36×5):** *Logg* (feil med «Bytt til \ohm» som retter og kompilerer, advarsel; trykk på `main.tex:17` går til koden) · *Kommentarer* (sitat, svar, svarfelt + Send) · *Deling* (inviter, personer med rolle, DuckDNS-lenke + Kopier) · *Sett inn* (3-kolonne rutenett med 12 valg).
+- **Kretseditor:** Avbryt / «Figur 1 · kretsskjema» / Ferdig. Verktøy: Velg | Ledning, Roter, Slett, Rydd, Lim inn SPICE. Lerret med prikkrutenett. Valgt komponent med blå stiplet ramme og flytende kort «R₁ 330 Ω Endre». Bunnark «KOMPONENTER» 5×2. I produktet: dra med én finger, knip/panorer med to.
+- **Kamera:** svart, × / «Foto | Skann dokument» / Blits, hjørnemarkører, hjelpetekst «Hold telefonen rett over koblingsbrettet, tavla eller oscilloskopet», utløser 76 px. Neste steg: beskjæring med fire håndtak + ark «Ny figur» (figurtekst, bredde 50/80/100 %, «Lagres som bilder/…jpg, komprimert til maks 1600 px», Ta på nytt / Sett inn figur). «Skann dokument» = perspektivkorrigering (native document scanner på iOS/Android).
+- **Nettbrett:** sidepanel 210 px (FILER med grønn aktiv, DISPOSISJON) kan skjules med ▤. SETT INN-raden øverst i editoren. Editor og PDF 50/50. Tastaturrad bare når skjermtastatur er åpent.
+- **Frakoblet:** gult banner under topplinjen «Frakoblet · kompilerer lokalt, 3 endringer venter på synk». Pillen viser «Lokalt».
+
+## Nye akseptansekriterier (11–12)
+11. Rundtur gjelder også `plot`, `cite` og tabeller med 2–8 kolonner.
+12. DOI-oppslag fungerer mot Crossref. BibTeX fra Zotero importeres uten tap av felt.
+13. En SPICE-netliste med 2–10 elementer blir en krets som kompilerer.
+14. Erstatt alle i «Alle prosjekter» kan angres i aktivt dokument.
+15. Appen kan brukes uten nett: skriv, lukk, åpne igjen, koble til → alt synkroniseres uten konflikter.
+16. Mobil: alle skjermer i `Kobling Mobil.dc.html` på iPhone 15, Pixel 8 og iPad Air, med trykkflater ≥ 44 px.

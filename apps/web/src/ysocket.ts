@@ -1,11 +1,14 @@
 // Kobler et Y.Doc til serveren (/sync/<dokument>) med y-websocket-protokollen,
 // inkludert awareness for live-markører. Kobler til på nytt ved brudd.
+// Dokumentet lagres også lokalt (y-indexeddb), så det kan åpnes og redigeres uten nett;
+// endringene synkroniseres når forbindelsen er tilbake.
 import * as syncProtocol from 'y-protocols/sync';
 import * as awarenessProtocol from 'y-protocols/awareness';
 import * as encoding from 'lib0/encoding';
 import * as decoding from 'lib0/decoding';
 import { Y } from '@kobling/core/ydoc';
-import { wsBase, authQuery } from './api';
+import { IndexeddbPersistence } from 'y-indexeddb';
+import { wsBase, authQuery, serverBase } from './api';
 
 const MSG_SYNC = 0, MSG_AWARENESS = 1, MSG_DENIED = 9, MSG_NOTICE = 10;
 
@@ -13,15 +16,25 @@ export class YSocket {
   doc = new Y.Doc();
   awareness = new awarenessProtocol.Awareness(this.doc);
   synced = false;
+  local = false; // lokal kopi (IndexedDB) er lastet
   onSynced: () => void = () => {};
+  onLocal: () => void = () => {};
   onDenied: () => void = () => {};
   onNotice: (text: string) => void = () => {};
   onStatus: (s: 'online' | 'offline' | 'closed', code?: number) => void = () => {};
   private ws: WebSocket | null = null;
   private wait = 500;
   private closed = false;
+  private paused = false;
+  private idb: IndexeddbPersistence | null = null;
 
-  constructor(private docId: string) {
+  constructor(private docId: string, opts: { persist?: boolean } = {}) {
+    if (opts.persist !== false && typeof indexedDB !== 'undefined') {
+      try {
+        this.idb = new IndexeddbPersistence('kobling:' + (serverBase() || location.origin) + ':' + docId, this.doc);
+        this.idb.on('synced', () => { if (!this.closed) { this.local = true; this.onLocal() } });
+      } catch { this.idb = null }
+    }
     this.doc.on('update', (u: Uint8Array, origin: any) => {
       if (origin === this) return;
       this.send(MSG_SYNC, enc => syncProtocol.writeUpdate(enc, u));
@@ -37,8 +50,18 @@ export class YSocket {
 
   private unload = () => awarenessProtocol.removeAwarenessStates(this.awareness, [this.doc.clientID], 'unload');
 
+  // «Frakoblet modus»: kobler fra uten å prøve igjen, og kobler til på nytt når det slås av
+  setPaused(p: boolean) {
+    if (p === this.paused) return;
+    this.paused = p;
+    if (p) this.ws?.close();
+    else if (!this.ws) { this.wait = 500; this.connect() }
+  }
+
+  get online() { return !!this.ws && this.ws.readyState === 1 }
+
   private connect() {
-    if (this.closed) return;
+    if (this.closed || this.paused) return;
     const ws = new WebSocket(wsBase() + '/sync/' + encodeURIComponent(this.docId) + authQuery());
     ws.binaryType = 'arraybuffer';
     this.ws = ws;
@@ -69,7 +92,7 @@ export class YSocket {
       awarenessProtocol.removeAwarenessStates(this.awareness, others, 'remote');
       if (this.closed || e.code === 4000 || e.code === 4401 || e.code === 4403) { this.onStatus('closed', e.code); return }
       this.onStatus('offline');
-      setTimeout(() => this.connect(), this.wait = Math.min(this.wait * 2, 10000));
+      if (!this.paused) setTimeout(() => this.connect(), this.wait = Math.min(this.wait * 2, 10000));
     };
   }
 
@@ -86,6 +109,7 @@ export class YSocket {
     this.unload();
     window.removeEventListener('beforeunload', this.unload);
     this.ws?.close();
+    this.idb?.destroy();
     this.awareness.destroy();
     this.doc.destroy();
   }
